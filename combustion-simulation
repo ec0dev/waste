@@ -1,0 +1,658 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ReferenceLine, ComposedChart } from "recharts";
+
+/* ─── PHYSICS ─────────────────────────────────────────────────────── */
+const G=9.81,Rg=287,Cp=1005,Patm=101325,T0=300,LATENT=2.443,RHO0=Patm/(Rg*T0);
+
+/* ─── FUELS ───────────────────────────────────────────────────────── */
+const FUELS={
+  wood:        {name:"Kayu / Biomasa",   LHV:15.0,mc:15,em:1.0,afr:6.0,c:"#a16207",icon:"🪵"},
+  dryWaste:    {name:"Sampah Kering",    LHV:11.0,mc:22,em:1.8,afr:5.5,c:"#84cc16",icon:"📦"},
+  mixedWaste:  {name:"Sampah Tercampur", LHV:8.0, mc:35,em:2.8,afr:5.0,c:"#f59e0b",icon:"🗑️"},
+  organicWaste:{name:"Sampah Organik",   LHV:5.5, mc:50,em:2.0,afr:4.5,c:"#22c55e",icon:"🌿"},
+  plastic:     {name:"Sampah Plastik",   LHV:32.0,mc:2, em:5.0,afr:8.0,c:"#a78bfa",icon:"♻️"},
+};
+
+/* ─── THEMES ──────────────────────────────────────────────────────── */
+const TH={
+  dark:{
+    bg:"#050d1a",sb:"#07101e",card:"#0a1628",bdr:"#1a2e44",inp:"#040c18",tag:"#0c1b2e",panelBg:"#060e1b",
+    txt:"#dde6f0",muted:"#5a7390",dim:"#1a2e44",acc:"#f97316",
+    ok:"#22c55e",warn:"#f59e0b",danger:"#ef4444",cyan:"#22d3ee",blue:"#3b82f6",violet:"#a78bfa",
+    gridCol:"#0f2035",hlBdr:"#f9731622",btnTxt:"#5a7390",shadow:"0 4px 28px rgba(0,0,0,.55)",
+  },
+  light:{
+    bg:"#f2f6fd",sb:"#e8f0fe",card:"#ffffff",bdr:"#cdd8ec",inp:"#f4f8ff",tag:"#eaf0fb",panelBg:"#f7faff",
+    txt:"#0f172a",muted:"#4a5568",dim:"#dde6f0",acc:"#ea580c",
+    ok:"#16a34a",warn:"#d97706",danger:"#dc2626",cyan:"#0891b2",blue:"#2563eb",violet:"#7c3aed",
+    gridCol:"#dde6ef",hlBdr:"#ea580c22",btnTxt:"#4a5568",shadow:"0 4px 20px rgba(0,0,0,.1)",
+  }
+};
+
+/* ─── FONT SIZES (1.5× original) ─────────────────────────────────── */
+const F={xxs:12,xs:13,sm:15,md:16,lg:19,xl:22,kpi:27,hdr:21};
+
+/* ─── HELPERS ─────────────────────────────────────────────────────── */
+function dAtH(hp,baseD,secs=[]){
+  for(const s of [...secs].sort((a,b)=>b.h_pct-a.h_pct)) if(hp>=s.h_pct) return s.d;
+  return baseD;
+}
+
+function simulate(p){
+  const{d_port,d_riser,H_riser,feed_rate_kg_h,LHV_MJkg,moisture_pct,
+    primary_air_Lmin,insulation,injections=[],riserSections=[],
+    T_primary_C=25,T_secondary_C=25,fuelType="wood"}=p;
+  const fuel=FUELS[fuelType]||FUELS.wood;
+  const Tp=T_primary_C+273.15,Ts=T_secondary_C+273.15;
+  const Ap=Math.PI/4*Math.max(d_port,0.01)**2,Ar=Math.PI/4*Math.max(d_riser,0.01)**2,aR=Ap/Ar;
+  const mcf=moisture_pct/100,LHV_e=Math.max(0.1,LHV_MJkg*(1-mcf)-LATENT*mcf);
+  const mdot=feed_rate_kg_h/3600,Qw=mdot*LHV_e*1e6;
+  const rhop=Patm/(Rg*Tp),mp=(primary_air_Lmin/60/1000)*rhop;
+  const mSt=mdot*fuel.afr,lam0=mSt>0?mp/mSt:1,m0=mp+mdot;
+  const Tf=Math.min(T0+(Qw+mp*Cp*(Tp-T0))*Math.min(lam0,1.3)/(m0*Cp),1773);
+  const injS=[...injections].sort((a,b)=>a.h_pct-b.h_pct);
+  let Tc=Tf,mg=m0,lam=lam0;
+  let CO=(lam0<1?Math.min(8000,7000*(1-lam0)+500):Math.max(50,600*Math.exp(-2*(lam0-1))))*fuel.em;
+  const done=new Set(),profile=[];
+  for(let i=0;i<=60;i++){
+    const h=(i/60)*H_riser,hp=(i/60)*100,dL=dAtH(hp,d_riser,riserSections),AL=Math.PI/4*dL**2;
+    for(let j=0;j<injS.length;j++){
+      const inj=injS[j];
+      if(!done.has(j)&&hp>=inj.h_pct&&inj.flow_Lmin>0){
+        done.add(j);
+        const mi=(inj.flow_Lmin/60/1000)*(Patm/(Rg*Ts));
+        Tc=(mg*Tc+mi*Ts)/(mg+mi);mg+=mi;lam=mSt>0?(mg-mdot)/mSt:lam;
+        Tc=Math.min(Tc+Math.max(0,1-lam0)*Qw*0.4*Math.min(1,mi/Math.max(mSt*0.3,1e-5))/(mg*Cp),1450);
+        CO=Math.max(CO*(lam<1?0.65:0.08),8*fuel.em);
+      }
+    }
+    const Uw=(1-(insulation/100))*8+(insulation/100)*0.3;
+    Tc=Math.max(Tc-(Uw*Math.PI*dL*(H_riser/60)*(Tc-T0))/(mg*Cp),T0+10);
+    const rhog=Patm/(Rg*Tc),v=mg>0?(mg/rhog)/AL:0,dP=RHO0*G*h*(1-T0/Tc);
+    const NOx=Tc>1273?Math.min(300,0.06*(Tc-1273)*lam*fuel.em):0;
+    const PM=Math.max(0.1,120*fuel.em*Math.exp(-0.005*(Tc-900))/Math.max(lam,0.5));
+    profile.push({h:+h.toFixed(3),h_pct:+hp.toFixed(1),T_C:Math.round(Tc-273),
+      CO_ppm:Math.round(CO),v:+v.toFixed(2),dP:+dP.toFixed(2),
+      NOx:+NOx.toFixed(1),PM25:+PM.toFixed(2),d_local:+dL.toFixed(3)});
+  }
+  const last=profile[profile.length-1],Tex=last.T_C+273;
+  const eff=Math.max(0,Math.min(70,(Qw-mg*Cp*(Tex-T0))/Qw*100));
+  const draft=Math.max(0,(RHO0-Patm/(Rg*Tex))*G*H_riser);
+  return{profile,A_port_cm2:(Ap*1e4).toFixed(2),A_riser_cm2:(Ar*1e4).toFixed(2),
+    area_ratio:aR.toFixed(3),area_ok:aR>0.85&&aR<1.15,Q_kW:(Qw/1000).toFixed(2),
+    T_flame_C:Math.round(Tf-273),T_exit_C:last.T_C,efficiency:eff.toFixed(1),
+    draft_Pa:draft.toFixed(1),lambda:lam0.toFixed(2),CO_exit:last.CO_ppm,
+    NOx_exit:last.NOx.toFixed(1),PM25_exit:last.PM25.toFixed(2)};
+}
+
+/* ─── OPTIMIZATION ────────────────────────────────────────────────── */
+function scoreR(r,obj){
+  const e=+r.efficiency,co=+r.CO_exit,nox=+r.NOx_exit,pm=+r.PM25_exit,lam=+r.lambda;
+  const lamB=lam>=0.9&&lam<=1.8?12:-15,dB=+r.draft_Pa>8?5:0;
+  if(obj==='eff')  return e*2-co*0.004-nox*0.05+lamB+dB;
+  if(obj==='em')   return-(co*0.3+nox*1.2+pm*5)+e*0.5+lamB;
+  return e*1.0+Math.max(0,60-co*0.06)*0.7+Math.max(0,15-nox)*0.4+Math.max(0,25-pm)*0.3+lamB+dB;
+}
+function runOpt(baseP,obj){
+  const rnd=(lo,hi)=>lo+Math.random()*(hi-lo),all=[];
+  for(let i=0;i<450;i++){
+    const p={...baseP,primary_air_Lmin:+rnd(10,200).toFixed(0),T_primary_C:+rnd(20,350).toFixed(0),
+      T_secondary_C:+rnd(20,350).toFixed(0),
+      injections:baseP.injections.map(inj=>({...inj,flow_Lmin:+rnd(0,80).toFixed(1)}))};
+    const r=simulate(p);all.push({p,r,score:scoreR(r,obj)});
+  }
+  all.sort((a,b)=>b.score-a.score);
+  for(let k=0;k<3;k++){
+    const bp=all[k].p;
+    for(let i=0;i<60;i++){
+      const pt=(v,lo,hi)=>Math.max(lo,Math.min(hi,v+(Math.random()-.5)*2*0.25*(hi-lo)));
+      const p={...baseP,primary_air_Lmin:+pt(bp.primary_air_Lmin,10,200).toFixed(0),
+        T_primary_C:+pt(bp.T_primary_C,20,350).toFixed(0),T_secondary_C:+pt(bp.T_secondary_C,20,350).toFixed(0),
+        injections:bp.injections.map(inj=>({...inj,flow_Lmin:+Math.max(0,Math.min(80,inj.flow_Lmin+(Math.random()-.5)*24)).toFixed(1)}))};
+      const r=simulate(p);all.push({p,r,score:scoreR(r,obj)});
+    }
+  }
+  return all.sort((a,b)=>b.score-a.score).slice(0,5);
+}
+
+/* ─── SCHEMATIC (always dark for thermal viz) ─────────────────────── */
+function Schematic({params,result}){
+  const W=340,H=420,ml=68,mb=36,mt=38;
+  const sh=H-mt-mb,horiz_h=44,horiz_w=(W-ml-30)*0.44;
+  const riser_h=sh*0.73,base_y=H-mb,riser_y=base_y-riser_h;
+  const riserCX=ml+horiz_w,horiz_y=base_y-horiz_h;
+  const D_REF=0.30,W_HALF=25,dToHW=d=>Math.max(5,(d/D_REF)*W_HALF),hToY=hp=>base_y-(hp/100)*riser_h;
+  const sortedRS=[...(params.riserSections||[])].sort((a,b)=>a.h_pct-b.h_pct);
+  const leftPts=[],rightPts=[];let curD=params.d_riser;
+  leftPts.push([riserCX-dToHW(curD),hToY(0)]);rightPts.push([riserCX+dToHW(curD),hToY(0)]);
+  for(const rs of sortedRS){
+    const y=hToY(rs.h_pct);
+    leftPts.push([riserCX-dToHW(curD),y],[riserCX-dToHW(rs.d),y]);
+    rightPts.push([riserCX+dToHW(curD),y],[riserCX+dToHW(rs.d),y]);
+    curD=rs.d;
+  }
+  leftPts.push([riserCX-dToHW(curD),hToY(100)]);rightPts.push([riserCX+dToHW(curD),hToY(100)]);
+  const poly=[...leftPts,...[...rightPts].reverse()].map(p=>p.join(',')).join(' ');
+  const maxHW=Math.max(...[params.d_riser,...(params.riserSections||[]).map(s=>s.d)].map(dToHW))+12;
+  const tColor=T=>{const t=Math.max(0,Math.min(1,(T-100)/900));return`rgb(${Math.round(255*Math.min(1,t*2))},${Math.round(255*Math.max(0,1-Math.abs(t-.5)*3))},${Math.round(255*Math.max(0,1-t*2))})`};
+  const getTc=hp=>(result.profile.find(p=>Math.abs(p.h_pct-hp)<3)||{T_C:500}).T_C;
+  const gs=Array.from({length:9},(_,i)=>({pct:i/8*100,c:tColor(getTc(100-i/8*100))}));
+  const activeInj=(params.injections||[]).filter(i=>i.flow_Lmin>0);
+  const fuel=FUELS[params.fuelType]||FUELS.wood;
+  const MK=[["aU","M0,6L3,0L6,6","rgba(255,255,255,.55)"],["aR","M0,0L6,3L0,6",fuel.c],["aS","M0,0L6,3L0,6","#22d3ee"],["aP","M0,0L6,3L0,6","#3b82f6"]];
+  return(
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"100%"}}>
+      <defs>
+        <linearGradient id="rG" x1="0" y1="1" x2="0" y2="0">{gs.map((s,i)=><stop key={i} offset={`${s.pct}%`} stopColor={s.c} stopOpacity=".9"/>)}</linearGradient>
+        <linearGradient id="hG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#1e3a5f"/><stop offset="100%" stopColor="#dc4e0c" stopOpacity=".95"/></linearGradient>
+        <filter id="gw"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <pattern id="grd" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0L0 0 0 10" fill="none" stroke="#0e1a2a" strokeWidth=".5"/></pattern>
+        {MK.map(([id,d,fill])=><marker key={id} id={id} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d={d} fill={fill}/></marker>)}
+      </defs>
+      <rect width={W} height={H} fill="url(#grd)"/>
+      <rect x={riserCX-maxHW} y={riser_y-12} width={maxHW*2} height={riser_h+24} fill="#111d2e" rx="3" stroke="#2a3f5f" strokeWidth="1"/>
+      <rect x={ml-8} y={horiz_y-8} width={horiz_w+8} height={horiz_h+16} fill="#111d2e" rx="3" stroke="#2a3f5f" strokeWidth="1"/>
+      <rect x={ml} y={horiz_y} width={horiz_w} height={horiz_h} fill="url(#hG)" rx="2" stroke="#f97316" strokeWidth="1.5" opacity=".95"/>
+      <text x={ml+horiz_w/2} y={horiz_y-15} textAnchor="middle" fill="#9ca3af" fontSize="8.5" fontFamily="monospace">COMBUSTION CHAMBER</text>
+      <text x={ml+horiz_w/2} y={horiz_y-4} textAnchor="middle" fill="#f97316" fontSize="7.5" fontFamily="monospace">L={(params.L_horiz*100).toFixed(0)}cm · ⌀={(params.d_port*100).toFixed(0)}cm</text>
+      <text x={ml+horiz_w/2} y={horiz_y+horiz_h/2+5} textAnchor="middle" fill="#fbbf24" fontSize="13" fontWeight="bold" fontFamily="monospace" filter="url(#gw)">{result.T_flame_C}°C</text>
+      <polygon points={poly} fill="url(#rG)" stroke="#f97316" strokeWidth="1.5" filter="url(#gw)"/>
+      {sortedRS.map((rs,i)=>{const y=hToY(rs.h_pct),hw=dToHW(rs.d);return(<g key={i}><line x1={riserCX-hw-2} y1={y} x2={riserCX+hw+2} y2={y} stroke="#06b6d4" strokeWidth="1.2" strokeDasharray="3 2"/><text x={riserCX+hw+6} y={y+4} fill="#06b6d4" fontSize="7.5" fontFamily="monospace">⌀{(rs.d*100).toFixed(0)}@{rs.h_pct}%</text></g>);})}
+      {[.18,.42,.68,.88].map((f,i)=><line key={i} x1={riserCX} y1={riser_y+riser_h*(1-f)+9} x2={riserCX} y2={riser_y+riser_h*(1-f)-9} stroke="rgba(255,255,255,.4)" strokeWidth="1.5" markerEnd="url(#aU)"/>)}
+      <text x={riserCX+maxHW+4} y={riser_y+12} fill="#9ca3af" fontSize="8.5" fontFamily="monospace">HEAT RISER</text>
+      <text x={riserCX+maxHW+4} y={riser_y+24} fill="#22d3ee" fontSize="8" fontFamily="monospace">H={params.H_riser.toFixed(2)}m</text>
+      <text x={riserCX+maxHW+4} y={riser_y+36} fill="#22d3ee" fontSize="8" fontFamily="monospace">⌀={(params.d_riser*100).toFixed(0)}cm</text>
+      <line x1={ml-32} y1={horiz_y+horiz_h*.45} x2={ml-2} y2={horiz_y+horiz_h*.45} stroke={fuel.c} strokeWidth="2" strokeDasharray="4 2" markerEnd="url(#aR)"/>
+      <text x={ml-34} y={horiz_y+horiz_h*.45-7} fill={fuel.c} fontSize="9" textAnchor="end" fontFamily="monospace">{fuel.icon}</text>
+      <text x={ml-34} y={horiz_y+horiz_h*.45+5} fill={fuel.c} fontSize="7.5" textAnchor="end" fontFamily="monospace">{params.feed_rate_kg_h}kg/h</text>
+      <line x1={ml-32} y1={base_y-10} x2={ml-2} y2={horiz_y+horiz_h-6} stroke="#3b82f6" strokeWidth="1.5" strokeDasharray="3 2" markerEnd="url(#aP)"/>
+      <text x={ml-34} y={base_y-17} fill="#3b82f6" fontSize="8" textAnchor="end" fontFamily="monospace">AIR₁</text>
+      <text x={ml-34} y={base_y-6} fill="#3b82f6" fontSize="7.5" textAnchor="end" fontFamily="monospace">{params.primary_air_Lmin}L/m</text>
+      <text x={ml-34} y={base_y+5} fill="#60a5fa" fontSize="7.5" textAnchor="end" fontFamily="monospace">{params.T_primary_C}°C</text>
+      {activeInj.map((inj,idx)=>{const iy=hToY(inj.h_pct),ix=riserCX-dToHW(dAtH(inj.h_pct,params.d_riser,params.riserSections||[]));return(<g key={idx} filter="url(#gw)"><line x1={ix-28} y1={iy} x2={ix-2} y2={iy} stroke="#22d3ee" strokeWidth="1.5" strokeDasharray="3 2" markerEnd="url(#aS)"/><circle cx={ix} cy={iy} r="4" fill="#22d3ee" opacity=".75"/><text x={ix-30} y={iy-5} fill="#22d3ee" fontSize="7.5" fontFamily="monospace" textAnchor="end">AIR₂@{inj.h_pct}%</text><text x={ix-30} y={iy+7} fill="#67e8f9" fontSize="7" fontFamily="monospace" textAnchor="end">{inj.flow_Lmin}L/m·{params.T_secondary_C}°C</text></g>);})}
+      <line x1={riserCX} y1={riser_y-2} x2={riserCX} y2={riser_y-24} stroke="#f97316" strokeWidth="2" strokeDasharray="4 2" markerEnd="url(#aU)" filter="url(#gw)"/>
+      <text x={riserCX+maxHW+4} y={riser_y-14} fill="#f97316" fontSize="8" fontFamily="monospace">EXHAUST {result.T_exit_C}°C</text>
+      {(()=>{const rx=riserCX-maxHW-14;return(<><line x1={rx} y1={riser_y} x2={rx} y2={base_y} stroke="#1e3a5f" strokeWidth="1"/>{[0,.25,.5,.75,1].map((f,i)=>{const ry=riser_y+riser_h*f;return(<g key={i}><line x1={rx-4} y1={ry} x2={rx+4} y2={ry} stroke="#334155" strokeWidth="1"/><text x={rx-6} y={ry+3} textAnchor="end" fill="#334155" fontSize="7" fontFamily="monospace">{((1-f)*params.H_riser).toFixed(1)}m</text></g>);})}</>);})()}
+      <g transform={`translate(${W-62},${H-86})`}>
+        <rect x="0" y="0" width="56" height="76" fill="#080f1e" stroke={result.area_ok?"#22c55e33":"#ef444433"} strokeWidth="1" rx="4"/>
+        <text x="28" y="13" textAnchor="middle" fill="#94a3b8" fontSize="7.5" fontFamily="monospace">AREA CHECK</text>
+        <rect x="8" y="20" width={Math.min(40,40*+result.A_port_cm2/Math.max(+result.A_riser_cm2,.01))} height="11" fill={result.area_ok?"#22c55e":"#ef4444"} rx="1" opacity=".8"/>
+        <rect x="8" y="35" width="40" height="11" fill="#f97316" rx="1" opacity=".6"/>
+        <text x="28" y="30" textAnchor="middle" fill="white" fontSize="6.5" fontFamily="monospace">PORT</text>
+        <text x="28" y="45" textAnchor="middle" fill="white" fontSize="6.5" fontFamily="monospace">RISER</text>
+        <text x="28" y="60" textAnchor="middle" fill={result.area_ok?"#22c55e":"#ef4444"} fontSize="9" fontFamily="monospace" fontWeight="bold">{result.area_ratio}</text>
+        <text x="28" y="71" textAnchor="middle" fill={result.area_ok?"#22c55e":"#ef4444"} fontSize="7" fontFamily="monospace">{result.area_ok?"✓ BALANCED":"⚠ ADJUST"}</text>
+      </g>
+    </svg>
+  );
+}
+
+/* ─── PRIMITIVES ──────────────────────────────────────────────────── */
+function Gauge({label,value,max,unit,warn,good,t}){
+  const pct=Math.min(100,(value/max)*100),c=value>=good?t.ok:value>=warn?t.warn:t.danger;
+  return(
+    <div style={{marginBottom:13}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+        <span style={{color:t.muted,fontSize:F.sm,fontFamily:"monospace"}}>{label}</span>
+        <span style={{color:c,fontSize:F.md,fontFamily:"monospace",fontWeight:"bold"}}>{value}{unit}</span>
+      </div>
+      <div style={{background:t.inp,borderRadius:4,height:8,overflow:"hidden"}}>
+        <div style={{width:`${pct}%`,height:"100%",borderRadius:4,background:`linear-gradient(90deg,${c}55,${c})`,transition:"width .4s",boxShadow:`0 0 8px ${c}44`}}/>
+      </div>
+    </div>
+  );
+}
+
+function Slider({label,value,min,max,step,unit,onChange,color,warn,note,t}){
+  const c=color||t.acc;
+  return(
+    <div style={{marginBottom:15}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <label style={{color:t.muted,fontSize:F.sm,fontFamily:"monospace"}}>{label}</label>
+        <span style={{color:warn?t.danger:c,fontSize:F.md,fontFamily:"monospace",fontWeight:"bold"}}>{value}{unit}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(parseFloat(e.target.value))}
+        style={{width:"100%",accentColor:c,cursor:"pointer",height:5}}/>
+      {note&&<div style={{color:c+"aa",fontSize:F.xxs,marginTop:3}}>{note}</div>}
+    </div>
+  );
+}
+
+function Sec({title,children,color,t}){
+  const c=color||t.acc;
+  return(
+    <div style={{marginBottom:22}}>
+      <div style={{color:c,fontSize:F.xs,fontWeight:"bold",letterSpacing:".18em",fontFamily:"monospace",
+        marginBottom:13,paddingBottom:6,borderBottom:`1px solid ${c}33`,textTransform:"uppercase"}}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+const CTip=({active,payload,label})=>{
+  if(!active||!payload?.length) return null;
+  return(
+    <div style={{background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:5,padding:"10px 14px",fontSize:F.sm,fontFamily:"monospace"}}>
+      <div style={{color:"#64748b",marginBottom:5}}>h = {label} m</div>
+      {payload.map((p,i)=><div key={i} style={{color:p.color,marginBottom:3}}>{p.name}: <strong>{+p.value.toFixed(2)}</strong><span style={{color:"#475569"}}> {p.unit||""}</span></div>)}
+    </div>
+  );
+};
+
+/* ─── OPTIMIZATION PANEL ──────────────────────────────────────────── */
+function OptPanel({params,curResult,t,onApply}){
+  const [obj,setObj]=useState('balanced');
+  const [running,setRunning]=useState(false);
+  const [results,setResults]=useState(null);
+  const [prog,setProg]=useState(0);
+  const OBJS=[
+    {k:'eff',     icon:"⚡",label:"Efisiensi Maks",  desc:"Maksimalkan efisiensi termal"},
+    {k:'em',      icon:"🌿",label:"Emisi Minimum",    desc:"Minimalisasi CO, NOx, PM2.5"},
+    {k:'balanced',icon:"⚖️",label:"Seimbang",         desc:"Keseimbangan efisiensi & emisi"},
+  ];
+  const run=()=>{
+    setRunning(true);setResults(null);setProg(0);
+    let p=0;const iv=setInterval(()=>{p+=Math.random()*15;setProg(Math.min(88,p));if(p>=88)clearInterval(iv);},90);
+    setTimeout(()=>{
+      const res=runOpt(params,obj);clearInterval(iv);setProg(100);
+      setTimeout(()=>{setResults(res);setRunning(false);},280);
+    },50);
+  };
+  const mColor=(k,r)=>{
+    if(k==='efficiency') return +r.efficiency>=40?t.ok:+r.efficiency>=25?t.warn:t.danger;
+    if(k==='CO_exit')    return +r.CO_exit<200?t.ok:+r.CO_exit<700?t.warn:t.danger;
+    if(k==='NOx_exit')   return +r.NOx_exit<50?t.ok:+r.NOx_exit<150?t.warn:t.danger;
+    if(k==='PM25_exit')  return +r.PM25_exit<10?t.ok:+r.PM25_exit<30?t.warn:t.danger;
+    if(k==='lambda')     return +r.lambda>=0.9&&+r.lambda<=1.8?t.ok:t.warn;
+    if(k==='draft_Pa')   return +r.draft_Pa>8?t.ok:t.warn;
+    return t.txt;
+  };
+  const delta=(k,optR,inv=false)=>{
+    const map={efficiency:+curResult.efficiency,CO_exit:+curResult.CO_exit,NOx_exit:+curResult.NOx_exit,PM25_exit:+curResult.PM25_exit,draft_Pa:+curResult.draft_Pa};
+    if(!(k in map)) return null;
+    const curr=map[k],opt=+optR[k],diff=opt-curr;
+    if(Math.abs(diff)<0.5) return null;
+    const pct=curr!==0?diff/Math.abs(curr)*100:0;
+    const good=inv?diff<0:diff>0;
+    return <span style={{fontSize:F.xxs,color:good?t.ok:t.danger,marginLeft:4}}>{diff>0?"+":""}{pct.toFixed(0)}%</span>;
+  };
+  return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",padding:"18px 24px",background:t.panelBg}}>
+      <div style={{fontSize:F.lg,fontWeight:"bold",color:t.acc,letterSpacing:".07em",marginBottom:8,fontFamily:"monospace"}}>🔧 MODUL OPTIMASI OTOMATIS</div>
+      <div style={{color:t.muted,fontSize:F.sm,marginBottom:20,fontFamily:"monospace",lineHeight:1.6}}>
+        Cari konfigurasi udara terbaik menggunakan Random Search + Local Refinement (630 iterasi). Geometri &amp; jenis bahan bakar dipertahankan. Parameter yang dioptimasi: laju alir primer, suhu primer, suhu sekunder, laju alir tiap titik injeksi.
+      </div>
+      {/* Objective */}
+      <div style={{display:"flex",gap:10,marginBottom:22,flexWrap:"wrap"}}>
+        {OBJS.map(o=>(
+          <button key={o.k} onClick={()=>setObj(o.k)} style={{flex:"1 1 140px",padding:"13px 16px",borderRadius:9,cursor:"pointer",
+            fontFamily:"monospace",background:obj===o.k?`${t.acc}18`:t.card,border:`1.5px solid ${obj===o.k?t.acc:t.bdr}`,
+            color:obj===o.k?t.acc:t.muted,transition:"all .2s",textAlign:"left"}}>
+            <div style={{fontSize:F.lg,marginBottom:4}}>{o.icon} <span style={{fontSize:F.md,fontWeight:"bold"}}>{o.label}</span></div>
+            <div style={{fontSize:F.xxs,opacity:.8}}>{o.desc}</div>
+          </button>
+        ))}
+      </div>
+      {/* Run button */}
+      <div style={{marginBottom:22}}>
+        <button onClick={run} disabled={running} style={{
+          background:running?t.dim:`linear-gradient(135deg,${t.acc},${t.acc}cc)`,border:"none",borderRadius:9,
+          color:"white",fontSize:F.md,fontWeight:"bold",padding:"13px 36px",cursor:running?"not-allowed":"pointer",
+          fontFamily:"monospace",letterSpacing:".06em",boxShadow:running?"none":`0 4px 18px ${t.acc}44`,transition:"all .3s"}}>
+          {running?"⏳ Sedang menghitung...":"▶ Jalankan Optimasi"}
+        </button>
+        {prog>0&&(
+          <div style={{marginTop:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+              <span style={{color:t.muted,fontSize:F.sm,fontFamily:"monospace"}}>Progress simulasi</span>
+              <span style={{color:t.acc,fontSize:F.sm,fontFamily:"monospace",fontWeight:"bold"}}>{Math.round(prog)}%</span>
+            </div>
+            <div style={{background:t.inp,borderRadius:4,height:9,overflow:"hidden"}}>
+              <div style={{width:`${prog}%`,height:"100%",borderRadius:4,background:`linear-gradient(90deg,${t.acc}88,${t.acc})`,transition:"width .15s"}}/>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Results */}
+      {results&&(
+        <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+          <div style={{fontSize:F.md,fontWeight:"bold",color:t.txt,marginBottom:16,fontFamily:"monospace"}}>
+            📊 Top 5 Konfigurasi Terbaik &nbsp;<span style={{color:t.muted,fontSize:F.sm,fontWeight:"normal"}}>— vs. konfigurasi saat ini</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {results.map((res,idx)=>(
+              <div key={idx} style={{background:t.card,border:`1.5px solid ${idx===0?t.acc:t.bdr}`,
+                borderRadius:11,padding:"18px 20px",position:"relative",boxShadow:idx===0?`0 0 22px ${t.acc}22`:t.shadow}}>
+                {idx===0&&<div style={{position:"absolute",top:-11,left:18,background:t.acc,color:"white",
+                  fontSize:F.xxs,fontWeight:"bold",padding:"2px 12px",borderRadius:10,fontFamily:"monospace"}}>🏆 TERBAIK</div>}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:10}}>
+                  <div>
+                    <div style={{color:t.muted,fontSize:F.xs,fontFamily:"monospace",marginBottom:8}}>Rank #{idx+1} · Skor: {res.score.toFixed(1)}</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {[
+                        {l:"Primer",v:`${res.p.primary_air_Lmin}L/min · ${res.p.T_primary_C}°C`},
+                        {l:"Sekunder",v:`${res.p.T_secondary_C}°C`},
+                        ...res.p.injections.map((inj,i)=>({l:`Inj#${i+1}@${inj.h_pct}%`,v:`${inj.flow_Lmin}L/min`})),
+                      ].map((item,i)=>(
+                        <div key={i} style={{background:t.tag,borderRadius:6,padding:"6px 12px"}}>
+                          <div style={{color:t.muted,fontSize:F.xxs,fontFamily:"monospace"}}>{item.l}</div>
+                          <div style={{color:t.cyan,fontSize:F.sm,fontWeight:"bold",fontFamily:"monospace"}}>{item.v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={()=>onApply(res.p)} style={{background:`${t.acc}18`,border:`1.5px solid ${t.acc}`,borderRadius:8,
+                    color:t.acc,fontSize:F.sm,fontWeight:"bold",padding:"9px 20px",cursor:"pointer",fontFamily:"monospace",whiteSpace:"nowrap"}}>
+                    ✓ Terapkan
+                  </button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(95px,1fr))",gap:8}}>
+                  {[
+                    {l:"Efisiensi",v:`${res.r.efficiency}%`,k:"efficiency"},
+                    {l:"CO Exit",  v:`${res.r.CO_exit}ppm`, k:"CO_exit",inv:true},
+                    {l:"NOx",      v:`${res.r.NOx_exit}ppm`,k:"NOx_exit",inv:true},
+                    {l:"PM2.5",    v:`${res.r.PM25_exit}`,  k:"PM25_exit",inv:true},
+                    {l:"Lambda λ", v:`${res.r.lambda}`,     k:"lambda"},
+                    {l:"Draft",    v:`${res.r.draft_Pa}Pa`, k:"draft_Pa"},
+                  ].map((m,i)=>(
+                    <div key={i} style={{background:t.inp,borderRadius:6,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{color:t.muted,fontSize:F.xxs,fontFamily:"monospace",marginBottom:3}}>{m.l}</div>
+                      <div style={{color:mColor(m.k,res.r),fontSize:F.sm,fontWeight:"bold",fontFamily:"monospace"}}>
+                        {m.v}{delta(m.k,res.r,m.inv)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── INITIAL PARAMS ──────────────────────────────────────────────── */
+const DEF={d_port:.10,L_horiz:.35,d_riser:.10,H_riser:.60,feed_rate_kg_h:2.0,LHV_MJkg:15.0,
+  moisture_pct:15,primary_air_Lmin:60,T_primary_C:25,T_secondary_C:25,insulation:70,fuelType:"wood",
+  injections:[{id:1,h_pct:30,flow_Lmin:20},{id:2,h_pct:60,flow_Lmin:15}],riserSections:[]};
+
+/* ─── MAIN APP ────────────────────────────────────────────────────── */
+export default function App(){
+  const [params,setParams]=useState(DEF);
+  const [result,setResult]=useState(()=>simulate(DEF));
+  const [themeKey,setThemeKey]=useState('dark');
+  const t=TH[themeKey];
+  const [sbW,setSbW]=useState(300);
+  const [sbOpen,setSbOpen]=useState(true);
+  const [activeTab,setActiveTab]=useState('temp');
+  const dragging=useRef(false);
+  const injId=useRef(3),secId=useRef(1);
+
+  const set=useCallback((k,v)=>setParams(p=>({...p,[k]:v})),[]);
+  const setFuel=useCallback(ft=>{const f=FUELS[ft];setParams(p=>({...p,fuelType:ft,LHV_MJkg:f.LHV,moisture_pct:f.mc}));},[]);
+  useEffect(()=>{ setResult(simulate(params)); },[params]);
+
+  // Sidebar drag resize
+  useEffect(()=>{
+    const mv=e=>{if(!dragging.current)return;setSbW(Math.max(220,Math.min(540,e.clientX)));};
+    const up=()=>{dragging.current=false;};
+    window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);
+    return()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);};
+  },[]);
+
+  const addInj=()=>{const id=injId.current++;setParams(p=>({...p,injections:[...p.injections,{id,h_pct:50,flow_Lmin:10}]}));};
+  const removeInj=id=>setParams(p=>({...p,injections:p.injections.filter(i=>i.id!==id)}));
+  const updInj=(id,k,v)=>setParams(p=>({...p,injections:p.injections.map(i=>i.id===id?{...i,[k]:v}:i)}));
+  const addSec=()=>{const id=secId.current++;setParams(p=>({...p,riserSections:[...p.riserSections,{id,h_pct:50,d:+(p.d_riser*1.2).toFixed(3)}]}));};
+  const removeSec=id=>setParams(p=>({...p,riserSections:p.riserSections.filter(s=>s.id!==id)}));
+  const updSec=(id,k,v)=>setParams(p=>({...p,riserSections:p.riserSections.map(s=>s.id===id?{...s,[k]:v}:s)}));
+  const applyOpt=useCallback(optP=>{setParams(p=>({...p,primary_air_Lmin:optP.primary_air_Lmin,T_primary_C:optP.T_primary_C,T_secondary_C:optP.T_secondary_C,injections:optP.injections}));setActiveTab('temp');},[]);
+
+  const CHARTS={
+    temp:    {label:"🌡 Suhu",    lines:[{key:"T_C",    name:"Suhu",    color:"#f97316",unit:"°C"}],     yLabel:"T (°C)"},
+    co:      {label:"💨 CO/NOx", lines:[{key:"CO_ppm", name:"CO",      color:"#ef4444",unit:"ppm"},{key:"NOx",name:"NOx",color:"#a78bfa",unit:"ppm"}],yLabel:"ppm"},
+    vel:     {label:"💨 Aliran", lines:[{key:"v",      name:"Velocity",color:"#22d3ee",unit:"m/s"},{key:"dP",name:"Draft",color:"#86efac",unit:"Pa"}],yLabel:"v/ΔP"},
+    pm:      {label:"🌫 PM2.5",  lines:[{key:"PM25",   name:"PM2.5",   color:"#fb923c",unit:"mg/MJ"}],   yLabel:"PM2.5"},
+    diam:    {label:"📐 Diameter",lines:[{key:"d_local",name:"⌀ Riser",color:"#06b6d4",unit:"m"}],       yLabel:"d (m)"},
+    opt:     {label:"🔧 Optimasi",lines:[],yLabel:""},
+  };
+  const aC=CHARTS[activeTab];
+  const fuel=FUELS[params.fuelType]||FUELS.wood;
+
+  const sBtnStyle=(active)=>({
+    background:active?t.card:t.inp,border:`1px solid ${active?t.acc:t.bdr}`,borderRadius:5,
+    color:active?t.acc:t.muted,fontSize:F.sm,padding:"5px 9px",cursor:"pointer",fontFamily:"monospace",whiteSpace:"nowrap"
+  });
+
+  const cardStyle={background:t.tag,borderRadius:6,padding:"9px 13px",border:`1px solid ${t.bdr}`};
+
+  return(
+    <div style={{display:"flex",height:"100vh",background:t.bg,fontFamily:"monospace",overflow:"hidden",color:t.txt}}>
+
+      {/* ── SIDEBAR ─────────────────────────────────────────── */}
+      {sbOpen&&(
+        <div style={{width:sbW,minWidth:sbW,maxWidth:sbW,background:t.sb,borderRight:`1px solid ${t.bdr}`,
+          overflowY:"auto",padding:"17px 15px",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,
+            paddingBottom:11,borderBottom:`1px solid ${t.acc}33`}}>
+            <span style={{color:t.acc,fontSize:F.hdr,fontWeight:"bold",letterSpacing:".09em"}}>⚙ INPUT</span>
+            <button onClick={()=>setSbOpen(false)} style={{background:t.card,border:`1px solid ${t.bdr}`,
+              borderRadius:6,color:t.muted,fontSize:F.sm,padding:"4px 11px",cursor:"pointer"}}>◀</button>
+          </div>
+
+          <Sec title="Combustion Chamber" color={t.acc} t={t}>
+            <Slider t={t} label="Port Diameter" value={params.d_port} min={.05} max={.25} step={.005} unit=" m" onChange={v=>set("d_port",v)}/>
+            <Slider t={t} label="Panjang Horizontal" value={params.L_horiz} min={.15} max={.80} step={.01} unit=" m" onChange={v=>set("L_horiz",v)}/>
+          </Sec>
+
+          <Sec title="Heat Riser" color="#fb923c" t={t}>
+            <Slider t={t} label="Diameter Dasar" value={params.d_riser} min={.05} max={.25} step={.005} unit=" m" warn={!result.area_ok} onChange={v=>set("d_riser",v)}/>
+            <Slider t={t} label="Tinggi Riser (H)" value={params.H_riser} min={.20} max={1.50} step={.01} unit=" m" onChange={v=>set("H_riser",v)}/>
+            {!result.area_ok&&<div style={{color:t.danger,fontSize:F.xs,marginTop:-6,marginBottom:13,padding:"6px 10px",
+              background:`${t.danger}11`,borderRadius:4,borderLeft:`2px solid ${t.danger}`}}>
+              ⚠ Ratio {result.area_ratio} — target 0.85–1.15
+            </div>}
+            <div style={{color:t.muted,fontSize:F.xs,marginTop:-4,marginBottom:15}}>H/d: <span style={{color:(params.H_riser/params.d_riser)>=5?t.ok:t.warn,fontWeight:"bold"}}>{(params.H_riser/params.d_riser).toFixed(1)} {(params.H_riser/params.d_riser)>=5?"✓":"(min 5)"}</span></div>
+            <div style={{color:t.cyan,fontSize:F.xs,letterSpacing:".12em",marginBottom:10,paddingBottom:6,
+              borderBottom:`1px solid ${t.cyan}22`,textTransform:"uppercase",fontWeight:"bold"}}>Ubah Diameter</div>
+            {params.riserSections.map(sec=>(
+              <div key={sec.id} style={{background:t.inp,border:`1px solid ${t.bdr}`,borderRadius:7,padding:"11px 13px",marginBottom:11}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
+                  <span style={{color:t.cyan,fontSize:F.sm}}>⌀{(sec.d*100).toFixed(0)}cm @{sec.h_pct}%</span>
+                  <button onClick={()=>removeSec(sec.id)} style={{background:"none",border:`1px solid ${t.danger}44`,borderRadius:4,color:t.danger,fontSize:F.xs,padding:"2px 8px",cursor:"pointer"}}>✕</button>
+                </div>
+                <Slider t={t} label="Posisi (%H)" value={sec.h_pct} min={5} max={95} step={5} unit="%" color={t.cyan} onChange={v=>updSec(sec.id,"h_pct",v)}/>
+                <Slider t={t} label="Diameter baru" value={sec.d} min={.05} max={.25} step={.005} unit=" m" color={t.cyan} onChange={v=>updSec(sec.id,"d",v)}/>
+              </div>
+            ))}
+            <button onClick={addSec} style={{width:"100%",background:`${t.cyan}0e`,border:`1px dashed ${t.cyan}44`,
+              borderRadius:6,color:t.cyan,fontSize:F.sm,padding:"9px",cursor:"pointer",fontFamily:"monospace",marginBottom:2}}>
+              + Tambah Ubah Diameter
+            </button>
+          </Sec>
+
+          <Sec title="Bahan Bakar" color="#fbbf24" t={t}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:15}}>
+              {Object.entries(FUELS).map(([k,f])=>(
+                <button key={k} onClick={()=>setFuel(k)} style={{
+                  background:params.fuelType===k?`${f.c}22`:t.card,border:`1px solid ${params.fuelType===k?f.c:t.bdr}`,
+                  borderRadius:6,color:params.fuelType===k?f.c:t.muted,fontSize:F.xs,padding:"9px 7px",
+                  cursor:"pointer",fontFamily:"monospace",textAlign:"center",transition:"all .2s",lineHeight:1.4}}>
+                  <div style={{fontSize:17}}>{f.icon}</div>
+                  <div style={{marginTop:3,fontSize:F.xxs}}>{f.name}</div>
+                </button>
+              ))}
+            </div>
+            {params.fuelType==="mixedWaste"&&<div style={{color:t.warn,fontSize:F.xs,padding:"7px 11px",background:`${t.warn}11`,borderRadius:5,borderLeft:`2px solid ${t.warn}`,marginBottom:13}}>🗑️ Emisi lebih tinggi (×2.8). Pertimbangkan sortasi pra-bakar.</div>}
+            {params.fuelType==="plastic"&&<div style={{color:t.danger,fontSize:F.xs,padding:"7px 11px",background:`${t.danger}11`,borderRadius:5,borderLeft:`2px solid ${t.danger}`,marginBottom:13}}>⚠ Dioksin &amp; HCl — butuh scrubber gas!</div>}
+            <Slider t={t} label="Feed Rate" value={params.feed_rate_kg_h} min={.2} max={8} step={.1} unit=" kg/h" color="#fbbf24" onChange={v=>set("feed_rate_kg_h",v)}/>
+            <Slider t={t} label="LHV (MJ/kg)" value={params.LHV_MJkg} min={3} max={35} step={.5} unit=" MJ/kg" color="#fbbf24" onChange={v=>set("LHV_MJkg",v)}/>
+            <Slider t={t} label="Kadar Air" value={params.moisture_pct} min={0} max={60} step={1} unit="%" color="#f59e0b" onChange={v=>set("moisture_pct",v)}/>
+            <Slider t={t} label="Insulasi" value={params.insulation} min={0} max={95} step={5} unit="%" color="#84cc16" onChange={v=>set("insulation",v)}/>
+          </Sec>
+
+          <Sec title="Udara Primer" color={t.blue} t={t}>
+            <Slider t={t} label="Laju Alir Primer" value={params.primary_air_Lmin} min={5} max={200} step={5} unit=" L/min" color={t.blue} onChange={v=>set("primary_air_Lmin",v)}/>
+            <Slider t={t} label="Suhu Udara Primer" value={params.T_primary_C} min={15} max={400} step={5} unit=" °C" color="#60a5fa"
+              note={params.T_primary_C>60?"✓ Pre-heat meningkatkan suhu nyala api":null} onChange={v=>set("T_primary_C",v)}/>
+            <div style={{color:+result.lambda<0.8?t.danger:+result.lambda>2?t.warn:t.ok,fontSize:F.sm,
+              marginTop:-4,marginBottom:8,padding:"5px 11px",background:t.inp,borderRadius:5}}>
+              λ = {result.lambda} — {+result.lambda<0.8?"⚠ KAYA: tidak sempurna":+result.lambda>2?"⚠ MISKIN: boros panas":"✓ Stoikiometri OK"}
+            </div>
+          </Sec>
+
+          <Sec title="Udara Sekunder" color={t.cyan} t={t}>
+            <Slider t={t} label="Suhu Udara Sekunder" value={params.T_secondary_C} min={15} max={400} step={5} unit=" °C" color="#67e8f9"
+              note={params.T_secondary_C>60?"✓ Udara panas percepat re-combustion":null} onChange={v=>set("T_secondary_C",v)}/>
+            {params.injections.map(inj=>(
+              <div key={inj.id} style={{background:t.inp,border:`1px solid ${t.bdr}`,borderRadius:7,padding:"11px 13px",marginBottom:11}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
+                  <span style={{color:t.cyan,fontSize:F.sm}}>Injeksi #{inj.id}</span>
+                  <button onClick={()=>removeInj(inj.id)} style={{background:"none",border:`1px solid ${t.danger}44`,borderRadius:4,color:t.danger,fontSize:F.xs,padding:"2px 8px",cursor:"pointer"}}>✕</button>
+                </div>
+                <Slider t={t} label="Posisi (%H)" value={inj.h_pct} min={5} max={95} step={5} unit="%" color={t.cyan} onChange={v=>updInj(inj.id,"h_pct",v)}/>
+                <Slider t={t} label="Laju Alir" value={inj.flow_Lmin} min={0} max={80} step={2.5} unit=" L/min" color="#67e8f9" onChange={v=>updInj(inj.id,"flow_Lmin",v)}/>
+              </div>
+            ))}
+            <button onClick={addInj} style={{width:"100%",background:`${t.cyan}0e`,border:`1px dashed ${t.cyan}44`,
+              borderRadius:6,color:t.cyan,fontSize:F.sm,padding:"9px",cursor:"pointer",fontFamily:"monospace"}}>
+              + Tambah Titik Injeksi
+            </button>
+          </Sec>
+        </div>
+      )}
+
+      {/* ── DRAG HANDLE ─────────────────────────────────────── */}
+      {sbOpen&&(
+        <div style={{width:6,flexShrink:0,cursor:"col-resize",display:"flex",alignItems:"center",justifyContent:"center",
+          background:"transparent",borderRight:`1px solid ${t.bdr}`,zIndex:10}}
+          onMouseDown={()=>{dragging.current=true;}}>
+          <div style={{width:3,height:44,borderRadius:3,background:t.bdr,opacity:.7}}/>
+        </div>
+      )}
+
+      {/* ── MAIN AREA ────────────────────────────────────────── */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+
+        {/* HEADER */}
+        <div style={{background:t.sb,borderBottom:`1px solid ${t.bdr}`,padding:"10px 20px",
+          display:"flex",alignItems:"center",gap:12,flexShrink:0,minHeight:65}}>
+          {!sbOpen&&<button onClick={()=>setSbOpen(true)} style={{...sBtnStyle(false),marginRight:4}}>▶ Menu</button>}
+          <div style={{width:7,height:30,background:t.acc,borderRadius:2,boxShadow:`0 0 14px ${t.acc}aa`}}/>
+          <div>
+            <div style={{fontSize:F.hdr,fontWeight:"bold",color:t.acc,letterSpacing:".07em"}}>WASTE COMBUSTION SIMULATION</div>
+            <div style={{fontSize:F.xs,color:t.muted}}>Winiarski · Fluid Dynamics · {fuel.icon} {fuel.name}</div>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+            {[
+              {l:"DAYA API",  v:`${result.Q_kW}kW`,    c:t.acc},
+              {l:"EFISIENSI", v:`${result.efficiency}%`,c:+result.efficiency>35?t.ok:t.warn},
+              {l:"EXIT CO",   v:`${result.CO_exit}ppm`, c:result.CO_exit<200?t.ok:result.CO_exit<700?t.warn:t.danger},
+              {l:"DRAFT",     v:`${result.draft_Pa}Pa`, c:t.cyan},
+            ].map((kpi,i)=>(
+              <div key={i} style={{textAlign:"center"}}>
+                <div style={{color:t.muted,fontSize:F.xxs,letterSpacing:".12em"}}>{kpi.l}</div>
+                <div style={{color:kpi.c,fontSize:F.kpi,fontWeight:"bold",lineHeight:1.15,textShadow:`0 0 14px ${kpi.c}88`}}>{kpi.v}</div>
+              </div>
+            ))}
+            <button onClick={()=>setThemeKey(k=>k==='dark'?'light':'dark')} style={{
+              background:t.card,border:`1px solid ${t.bdr}`,borderRadius:9,
+              color:t.txt,fontSize:F.lg,padding:"7px 14px",cursor:"pointer",marginLeft:6}} title="Ganti tema">
+              {themeKey==='dark'?"☀️":"🌙"}
+            </button>
+          </div>
+        </div>
+
+        {/* SCHEMATIC + KPI */}
+        <div style={{display:"flex",flex:"0 0 420px",overflow:"hidden",borderBottom:`1px solid ${t.bdr}`}}>
+          <div style={{width:340,flexShrink:0,borderRight:`1px solid ${t.bdr}`,
+            display:"flex",alignItems:"center",justifyContent:"center",background:"#050d1a"}}>
+            <Schematic params={params} result={result}/>
+          </div>
+          <div style={{flex:1,padding:"16px 20px",overflowY:"auto",background:t.panelBg}}>
+            <div style={{fontSize:F.sm,color:t.acc,letterSpacing:".15em",marginBottom:15,textTransform:"uppercase",
+              borderBottom:`1px solid ${t.hlBdr}`,paddingBottom:7,fontWeight:"bold"}}>Output Summary</div>
+            <Gauge t={t} label="Efisiensi Termal" value={+result.efficiency} max={70} unit="%" warn={30} good={40}/>
+            <Gauge t={t} label="Suhu Pembakaran"  value={result.T_flame_C}   max={1400} unit="°C" warn={600} good={800}/>
+            <Gauge t={t} label="Suhu Gas Keluar"  value={result.T_exit_C}    max={500}  unit="°C" warn={0}   good={150}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:15}}>
+              {[
+                {l:"Fire Power",     v:`${result.Q_kW} kW`,        c:t.acc},
+                {l:"Natural Draft",  v:`${result.draft_Pa} Pa`,     c:t.cyan},
+                {l:"A_port",         v:`${result.A_port_cm2} cm²`,  c:t.muted},
+                {l:"A_riser",        v:`${result.A_riser_cm2} cm²`, c:t.muted},
+                {l:"Area Ratio",     v:result.area_ratio,           c:result.area_ok?t.ok:t.danger},
+                {l:"Lambda λ",       v:result.lambda,               c:+result.lambda>0.9&&+result.lambda<1.8?t.ok:t.warn},
+                {l:"Exit CO",        v:`${result.CO_exit} ppm`,     c:result.CO_exit<200?t.ok:t.danger},
+                {l:"Exit NOx",       v:`${result.NOx_exit} ppm`,    c:+result.NOx_exit<50?t.ok:t.warn},
+                {l:"Exit PM2.5",     v:`${result.PM25_exit}mg/MJ`,  c:+result.PM25_exit<10?t.ok:t.warn},
+                {l:"T Pembakaran",   v:`${result.T_flame_C}°C`,     c:result.T_flame_C>=600?t.ok:t.danger},
+                {l:"Suhu Primer",    v:`${params.T_primary_C}°C`,   c:t.blue},
+                {l:"Suhu Sekunder",  v:`${params.T_secondary_C}°C`, c:t.cyan},
+              ].map((item,i)=>(
+                <div key={i} style={cardStyle}>
+                  <div style={{color:t.muted,fontSize:F.xxs,marginBottom:4}}>{item.l}</div>
+                  <div style={{color:item.c,fontSize:F.md,fontWeight:"bold",wordBreak:"break-all"}}>{item.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* TABS + CONTENT */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div style={{display:"flex",gap:6,padding:"10px 16px",flexShrink:0,borderBottom:`1px solid ${t.bdr}`,
+            flexWrap:"wrap",background:t.panelBg}}>
+            {Object.entries(CHARTS).map(([k,c])=>(
+              <button key={k} onClick={()=>setActiveTab(k)} style={{
+                background:activeTab===k?`${t.acc}18`:t.card,border:`1.5px solid ${activeTab===k?t.acc:t.bdr}`,
+                borderRadius:6,color:activeTab===k?t.acc:t.btnTxt,fontSize:F.sm,padding:"7px 14px",
+                cursor:"pointer",fontFamily:"monospace",letterSpacing:".04em",transition:"all .2s",
+                fontWeight:activeTab===k?"bold":"normal"}}>
+                {c.label}
+              </button>
+            ))}
+            <div style={{marginLeft:"auto",color:t.dim,fontSize:F.xs,alignSelf:"center"}}>
+              {result.profile.length}pts · {params.riserSections.length}Δ⌀ · {params.injections.filter(i=>i.flow_Lmin>0).length}inj
+            </div>
+          </div>
+          <div style={{flex:1,overflow:"hidden",display:"flex"}}>
+            {activeTab==='opt'?(
+              <OptPanel params={params} curResult={result} t={t} onApply={applyOpt}/>
+            ):(
+              <div style={{flex:1,padding:"10px 14px",minHeight:0,background:t.bg}}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={result.profile} margin={{top:6,right:22,bottom:24,left:8}}>
+                    <CartesianGrid stroke={t.gridCol} strokeDasharray="3 3"/>
+                    <XAxis dataKey="h" stroke={t.bdr} tick={{fill:t.muted,fontSize:F.xs,fontFamily:"monospace"}}
+                      label={{value:"Ketinggian Riser (m)",position:"insideBottom",offset:-14,fill:t.muted,fontSize:F.sm}}/>
+                    <YAxis stroke={t.bdr} tick={{fill:t.muted,fontSize:F.xs,fontFamily:"monospace"}}
+                      label={{value:aC.yLabel,angle:-90,position:"insideLeft",fill:t.muted,fontSize:F.sm,dy:40}}/>
+                    <Tooltip content={<CTip/>}/>
+                    <Legend wrapperStyle={{fontSize:F.sm,fontFamily:"monospace",color:t.muted}}/>
+                    {params.injections.filter(i=>i.flow_Lmin>0).map((inj,i)=>{
+                      const hv=+(inj.h_pct/100*params.H_riser).toFixed(3);
+                      return <ReferenceLine key={i} x={hv} stroke={t.cyan+"55"} strokeDasharray="4 2"
+                        label={{value:`AIR₂@${inj.h_pct}%`,position:"top",fill:t.cyan,fontSize:F.xxs}}/>;
+                    })}
+                    {params.riserSections.map((sec,i)=>{
+                      const hv=+(sec.h_pct/100*params.H_riser).toFixed(3);
+                      return <ReferenceLine key={`s${i}`} x={hv} stroke="#06b6d455" strokeDasharray="2 4"
+                        label={{value:`⌀${(sec.d*100).toFixed(0)}@${sec.h_pct}%`,position:"insideTopRight",fill:"#06b6d4",fontSize:F.xxs}}/>;
+                    })}
+                    {aC.lines.map(l=>(
+                      <Area key={l.key} type="monotone" dataKey={l.key} name={l.name}
+                        stroke={l.color} fill={l.color+"18"} strokeWidth={2.5} dot={false}
+                        activeDot={{r:5,fill:l.color}} unit={l.unit}/>
+                    ))}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
