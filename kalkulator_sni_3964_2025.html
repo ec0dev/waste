@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kalkulator Contoh Sampling Sampah — SNI 3964:2025</title>
+<style>
+:root{
+  --p:#1a6b3c;--pl:#2a8a50;--pd:#134d2c;--sec:#e8f5e9;--bg:#f0f4f1;
+  --card:#fff;--brd:#c8e6c9;--txt:#1b2b1b;--mut:#5a7a5a;
+  --red:#c62828;--blu:#1565c0;--blub:#e3f2fd;
+  --warn:#e65100;--warnb:#fff8e1;--shd:0 2px 14px rgba(0,0,0,.09);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+header{background:linear-gradient(135deg,var(--pd),var(--p));color:#fff;padding:16px 28px;
+  display:flex;align-items:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+header .logo{font-size:1.9rem}
+header h1{font-size:1.13rem;font-weight:700;line-height:1.3}
+header p{font-size:.76rem;opacity:.85;margin-top:3px}
+.wrap{max-width:1000px;margin:22px auto;padding:0 14px 40px}
+
+/* TABS */
+.tabs{display:flex;flex-wrap:wrap;border-bottom:2px solid var(--brd);margin-bottom:20px;gap:2px}
+.tb{padding:9px 16px;font-size:.85rem;font-weight:600;border:none;background:none;
+  cursor:pointer;color:var(--mut);border-bottom:3px solid transparent;margin-bottom:-2px;
+  border-radius:6px 6px 0 0;transition:all .18s}
+.tb.on{color:var(--p);border-bottom-color:var(--p);background:var(--sec)}
+.tb:hover:not(.on){color:var(--pl);background:var(--sec)}
+.tab{display:none}.tab.on{display:block}
+
+/* CARDS */
+.card{background:var(--card);border-radius:10px;box-shadow:var(--shd);
+  padding:20px 24px;margin-bottom:16px;border:1px solid var(--brd)}
+.ct{font-size:.97rem;font-weight:700;color:var(--pd);margin-bottom:13px;
+  display:flex;align-items:center;gap:7px}
+
+/* FORMS */
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.r3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
+.fg{margin-bottom:13px}
+.fg label{display:block;font-size:.82rem;font-weight:600;color:var(--mut);margin-bottom:4px}
+.fg input,.fg select{width:100%;padding:8px 11px;border:1.5px solid var(--brd);
+  border-radius:7px;font-size:.91rem;background:#fafffe;color:var(--txt);transition:border .18s}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--p);background:#fff}
+.fg .hint{font-size:.73rem;color:var(--mut);margin-top:3px}
+.fg input[readonly]{background:#f3f3f3;color:#888}
+
+/* BOXES */
+.ibox{background:var(--blub);border-left:4px solid var(--blu);border-radius:6px;
+  padding:9px 13px;margin-bottom:12px;font-size:.82rem;color:var(--blu)}
+.wbox{background:var(--warnb);border-left:4px solid var(--warn);border-radius:6px;
+  padding:9px 13px;margin-bottom:12px;font-size:.82rem;color:var(--warn)}
+.ebox{background:#ffebee;border-left:4px solid var(--red);border-radius:6px;
+  padding:9px 13px;margin-bottom:12px;font-size:.82rem;color:var(--red);display:none}
+.fbox{background:#f1f8e9;border:1px dashed #81c784;border-radius:6px;
+  padding:9px 13px;font-size:.81rem;color:#2e7d32;margin-bottom:11px;
+  font-family:monospace;white-space:pre-wrap;line-height:1.7}
+
+/* TOGGLE */
+.trow{display:flex;align-items:center;gap:10px;margin-bottom:13px;
+  background:var(--warnb);border:1px solid #ffe0b2;border-radius:8px;padding:9px 13px}
+.trow label{font-size:.85rem;color:var(--warn);font-weight:600;cursor:pointer}
+.trow input[type=checkbox]{width:17px;height:17px;accent-color:var(--p);cursor:pointer}
+
+/* BUTTONS */
+.btn{padding:10px 26px;border:none;border-radius:7px;font-size:.92rem;
+  font-weight:700;cursor:pointer;transition:all .18s}
+.bp{background:var(--p);color:#fff}.bp:hover{background:var(--pl)}
+.bs{background:#eee;color:var(--txt)}.bs:hover{background:#ddd}
+.bg-btn{display:flex;gap:9px;margin-top:5px}
+.add-btn{background:var(--sec);border:1.5px dashed var(--p);color:var(--p);
+  border-radius:7px;padding:8px;font-size:.85rem;font-weight:700;
+  cursor:pointer;width:100%;margin-bottom:13px;transition:all .18s}
+.add-btn:hover{background:#c8e6c9}
+
+/* ENTRY ROWS */
+.entry{background:#f7fbf8;border:1px solid var(--brd);border-radius:8px;
+  padding:13px;margin-bottom:9px;position:relative}
+.entry .del{position:absolute;top:9px;right:9px;background:#ffebee;
+  border:none;color:var(--red);border-radius:50%;width:24px;height:24px;
+  cursor:pointer;font-size:.95rem;font-weight:700;line-height:24px;text-align:center}
+
+/* RESULTS */
+.rcard{background:linear-gradient(135deg,var(--sec),#f0faf2);
+  border:1.5px solid var(--pl);border-radius:10px;padding:18px 22px;margin-top:18px}
+.rtitle{font-size:.93rem;font-weight:700;color:var(--pd);margin-bottom:13px;
+  border-bottom:1px solid var(--brd);padding-bottom:7px}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:11px;margin-bottom:13px}
+.ri{background:#fff;border-radius:7px;padding:11px 13px;border:1px solid var(--brd)}
+.ri .rl{font-size:.73rem;color:var(--mut);margin-bottom:3px}
+.ri .rv{font-size:1.25rem;font-weight:700;color:var(--p)}
+.ri .ru{font-size:.73rem;color:var(--mut);margin-top:2px}
+.rt{width:100%;border-collapse:collapse;font-size:.86rem}
+.rt th{background:var(--p);color:#fff;padding:7px 11px;text-align:left}
+.rt td{padding:7px 11px;border-bottom:1px solid var(--brd)}
+.rt tr:last-child td{border-bottom:none}
+.rt tr:hover td{background:var(--sec)}
+.rt .tot td{font-weight:700;background:#e8f5e9;color:var(--pd)}
+.steps{counter-reset:s;list-style:none;margin-top:9px}
+.steps li{counter-increment:s;padding:7px 7px 7px 36px;position:relative;
+  font-size:.85rem;border-bottom:1px solid #f0f0f0}
+.steps li:before{content:counter(s);position:absolute;left:5px;top:7px;
+  background:var(--p);color:#fff;border-radius:50%;width:21px;height:21px;
+  display:flex;align-items:center;justify-content:center;font-size:.73rem;font-weight:700}
+.steps li:last-child{border-bottom:none}
+.badge{display:inline-block;padding:2px 9px;border-radius:11px;font-size:.73rem;font-weight:700}
+.bg{background:#e8f5e9;color:var(--p)}.bb{background:var(--blub);color:var(--blu)}
+.bo{background:var(--warnb);color:var(--warn)}.br{background:#ffebee;color:var(--red)}
+
+/* METHOD INDICATOR */
+.meth-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+  border-radius:20px;font-size:.8rem;font-weight:700;margin-bottom:12px}
+.meth-green{background:#e8f5e9;color:var(--p);border:1px solid var(--brd)}
+.meth-orange{background:var(--warnb);color:var(--warn);border:1px solid #ffe0b2}
+
+@media(max-width:600px){.r2,.r3{grid-template-columns:1fr}.rgrid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🗑️</div>
+  <div>
+    <h1>Kalkulator Sampling Timbulan Sampah — SNI 3964:2025</h1>
+    <p>Penentuan Jumlah Contoh SRT · SSSRT · TPS/TPS3R/TPST · TPA</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="tabs">
+  <button class="tb on" onclick="sw('srt',this)">🏠 SRT</button>
+  <button class="tb" onclick="sw('sssrt',this)">🏢 SSSRT</button>
+  <button class="tb" onclick="sw('tps',this)">🚛 TPS/TPS3R/TPST</button>
+  <button class="tb" onclick="sw('tpa',this)">⛰️ TPA</button>
+  <button class="tb" onclick="sw('info',this)">📖 Panduan & Rumus</button>
+</div>
+
+<!-- ═══════════════════════════ TAB SRT ═══════════════════════════ -->
+<div id="tab-srt" class="tab on">
+
+  <div class="card">
+    <div class="ct">👥 Data Jumlah Penduduk</div>
+    <div class="trow">
+      <input type="checkbox" id="chk-proy" onchange="togProy()">
+      <label for="chk-proy">⚠️ Data penduduk tahun rencana <b>tidak tersedia</b> — aktifkan proyeksi geometrik</label>
+    </div>
+
+    <div id="sec-dir">
+      <div class="r2">
+        <div class="fg">
+          <label>Jumlah Penduduk Tahun Rencana (Pt) *</label>
+          <input type="number" id="pt" min="1" placeholder="Jumlah jiwa" oninput="autoKota(this.value,'srt')">
+        </div>
+        <div class="fg"><label>Tahun Rencana</label>
+          <input type="number" id="thr-d" value="2025"></div>
+      </div>
+    </div>
+
+    <div id="sec-proy" style="display:none">
+      <div class="fbox">Pt = P₀ × (1 + r/100)ⁿ  |  r = laju pertumbuhan (%/tahun), n = selisih tahun</div>
+      <div class="r2">
+        <div class="fg"><label>Penduduk Tahun Dasar (P₀) *</label>
+          <input type="number" id="p0" min="1" placeholder="Jiwa tersedia" oninput="prevProy()"></div>
+        <div class="fg"><label>Tahun Dasar</label>
+          <input type="number" id="td" value="2020" oninput="prevProy()"></div>
+      </div>
+      <div class="r2">
+        <div class="fg"><label>Laju Pertumbuhan r (%/tahun) *</label>
+          <input type="number" id="rg" step="0.01" placeholder="Contoh: 1.5" oninput="prevProy()"></div>
+        <div class="fg"><label>Tahun Rencana Sampling</label>
+          <input type="number" id="thr-p" value="2025" oninput="prevProy()"></div>
+      </div>
+      <div id="proy-prev" style="display:none">
+        <div class="ibox" id="proy-txt"></div>
+        <button class="btn bp" onclick="pakaiProy()" style="margin-bottom:10px">✅ Gunakan Nilai Proyeksi Ini</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">🏙️ Klasifikasi Kota & Metode</div>
+    <div id="srt-auto-badge"></div>
+    <div class="r2">
+      <div class="fg"><label>Klasifikasi Kota</label>
+        <select id="srt-kota" onchange="setCd('srt-kota','srt-cd')">
+          <option value="">— Pilih klasifikasi —</option>
+          <option value="1.5">Megapolitan (≥5.000.000) — Cd=1,5</option>
+          <option value="1">Metropolitan (1–4,9 jt) — Cd=1,0</option>
+          <option value="1b">Kota Besar (500–999 rb) — Cd=1,0</option>
+          <option value="0.5">Kota Sedang (100–499 rb) — Cd=0,5</option>
+          <option value="0.5k">Kota Kecil (&lt;100 rb) — Cd=0,5</option>
+        </select>
+      </div>
+      <div class="fg"><label>Koefisien Cd (otomatis)</label>
+        <input type="number" id="srt-cd" readonly placeholder="—"></div>
+    </div>
+    <div class="r2">
+      <div class="fg"><label>Metode</label>
+        <select id="srt-met">
+          <option value="alt1">Alternatif 1 — Ps = Cd × √Pt</option>
+          <option value="alt2">Alternatif 2 — Slovin n=N/(1+Ne²)</option>
+        </select>
+      </div>
+      <div class="fg"><label>Tingkat Error e (Alt 2)</label>
+        <select id="srt-e">
+          <option value="0.1">10%</option><option value="0.05">5%</option><option value="0.01">1%</option>
+        </select>
+      </div>
+    </div>
+    <div class="r2">
+      <div class="fg"><label>Rata-rata Orang per KK (N̄)</label>
+        <input type="number" id="avg-kk" value="4" min="1" max="10" step="0.1">
+        <div class="hint">Default 4 orang/KK — sesuaikan data BPS setempat</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">📊 Distribusi Tingkat Ekonomi (Sn)</div>
+    <div class="ibox">Total Sn_H + Sn_M + Sn_L = 100%. Sumber: BPS/BKKBN/survei lapangan.</div>
+    <div class="r3">
+      <div class="fg"><label>High — Tinggi (%)</label>
+        <input type="number" id="sn-h" value="15" min="0" max="100" step="0.1" oninput="chkSn()"></div>
+      <div class="fg"><label>Medium — Menengah (%)</label>
+        <input type="number" id="sn-m" value="75" min="0" max="100" step="0.1" oninput="chkSn()"></div>
+      <div class="fg"><label>Low — Rendah (%)</label>
+        <input type="number" id="sn-l" value="10" min="0" max="100" step="0.1" oninput="chkSn()"></div>
+    </div>
+    <div id="sn-stat"></div>
+  </div>
+
+  <div class="ebox" id="err-srt"></div>
+  <div class="bg-btn">
+    <button class="btn bp" onclick="calcSRT()">🧮 Hitung Jumlah Contoh SRT</button>
+    <button class="btn bs" onclick="resetTab('srt')">🔄 Reset</button>
+  </div>
+
+  <div id="res-srt" style="display:none">
+    <div class="rcard">
+      <div class="rtitle">📋 Hasil — Jumlah Contoh SRT (Pasal 4.2.2)</div>
+      <div class="rgrid" id="rg-srt"></div>
+      <table class="rt">
+        <thead><tr><th>Tingkat Ekonomi</th><th>Proporsi (Sn)</th><th>Jumlah KK</th><th>Jumlah Rumah (Nr)</th></tr></thead>
+        <tbody id="srt-tbody"></tbody>
+        <tfoot><tr class="tot"><td>TOTAL</td><td>100%</td><td id="srt-ktot">—</td><td id="srt-nrtot">—</td></tr></tfoot>
+      </table>
+      <div style="margin-top:12px">
+        <b style="font-size:.83rem;color:var(--pd)">📐 Langkah Perhitungan:</b>
+        <ol class="steps" id="srt-steps"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TAB SSSRT ═══════════════════════════ -->
+<div id="tab-sssrt" class="tab">
+  <div class="card">
+    <div class="ct">🏢 Parameter SSSRT</div>
+    <div class="r3">
+      <div class="fg"><label>Metode</label>
+        <select id="sssrt-met">
+          <option value="alt1">Alt 1 — S = Cd × √Ts</option>
+          <option value="alt2">Alt 2 — Slovin</option>
+        </select>
+      </div>
+      <div class="fg"><label>Klasifikasi Kota (Cd)</label>
+        <select id="sssrt-kota" onchange="setCd('sssrt-kota','sssrt-cd')">
+          <option value="">— Pilih —</option>
+          <option value="1.5">Megapolitan — Cd=1,5</option>
+          <option value="1">Metropolitan — Cd=1,0</option>
+          <option value="1b">Kota Besar — Cd=1,0</option>
+          <option value="0.5">Kota Sedang — Cd=0,5</option>
+          <option value="0.5k">Kota Kecil — Cd=0,5</option>
+        </select>
+      </div>
+      <div class="fg"><label>Koefisien Cd</label>
+        <input type="number" id="sssrt-cd" readonly placeholder="—"></div>
+    </div>
+    <div class="r2">
+      <div class="fg"><label>Tingkat Error e (Alt 2)</label>
+        <select id="sssrt-e">
+          <option value="0.1">10%</option><option value="0.05">5%</option><option value="0.01">1%</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">📝 Daftar Jenis Fasilitas SSSRT</div>
+    <div class="ibox">Tambahkan setiap jenis fasilitas beserta jumlah total unit di wilayah kajian. Hitung terpisah per jenis fasilitas.</div>
+    <div id="sssrt-rows"></div>
+    <button class="add-btn" onclick="addRow('sssrt-rows','sssrt')">＋ Tambah Jenis Fasilitas</button>
+  </div>
+  <div class="ebox" id="err-sssrt"></div>
+  <div class="bg-btn">
+    <button class="btn bp" onclick="calcSSSRT()">🧮 Hitung Jumlah Contoh SSSRT</button>
+    <button class="btn bs" onclick="resetTab('sssrt')">🔄 Reset</button>
+  </div>
+  <div id="res-sssrt" style="display:none">
+    <div class="rcard">
+      <div class="rtitle">📋 Hasil — Jumlah Contoh SSSRT (Pasal 4.2.3)</div>
+      <table class="rt">
+        <thead><tr><th>Jenis Fasilitas</th><th>Total Unit (Ts)</th><th>Jml Contoh (S/n)</th><th>Rumus</th></tr></thead>
+        <tbody id="sssrt-tbody"></tbody>
+        <tfoot><tr class="tot"><td>TOTAL</td><td id="sssrt-tstot">—</td><td id="sssrt-ntot">—</td><td>—</td></tr></tfoot>
+      </table>
+      <div style="margin-top:12px">
+        <b style="font-size:.83rem;color:var(--pd)">📐 Langkah Perhitungan:</b>
+        <ol class="steps" id="sssrt-steps"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TAB TPS ═══════════════════════════ -->
+<div id="tab-tps" class="tab">
+  <div class="card">
+    <div class="ct">🚛 Parameter TPS/TPS3R/TPST</div>
+    <div class="ibox">
+      <b>Pasal 4.2.4 SNI 3964:2025</b><br>
+      • Jika N &gt; 30 kali/hari → gunakan <b>Alternatif 1</b>: Slovin n = N/(1+Ne²)<br>
+      • Jika N ≤ 30 kali/hari → gunakan <b>Alternatif 2</b>: ambil 10% dari N (dibulatkan ke atas)
+    </div>
+    <div class="r2">
+      <div class="fg"><label>Metode (atau biarkan Otomatis)</label>
+        <select id="tps-met">
+          <option value="auto">🤖 Otomatis (sesuai N vs 30)</option>
+          <option value="alt1">Paksa Alternatif 1 — Slovin</option>
+          <option value="alt2">Paksa Alternatif 2 — 10%</option>
+        </select>
+      </div>
+      <div class="fg"><label>Tingkat Error e (Alt 1 / Slovin)</label>
+        <select id="tps-e">
+          <option value="0.1">10%</option><option value="0.05">5%</option><option value="0.01">1%</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">🏗️ Daftar Lokasi TPS/TPS3R/TPST</div>
+    <div class="ibox">Tambahkan setiap lokasi TPS/TPS3R/TPST beserta total ritasi/kunjungan alat pengumpulan per hari.</div>
+    <div id="tps-rows"></div>
+    <button class="add-btn" onclick="addRow('tps-rows','tps')">＋ Tambah Lokasi TPS/TPS3R/TPST</button>
+  </div>
+  <div class="ebox" id="err-tps"></div>
+  <div class="bg-btn">
+    <button class="btn bp" onclick="calcTPS()">🧮 Hitung Jumlah Contoh TPS/TPS3R/TPST</button>
+    <button class="btn bs" onclick="resetTab('tps')">🔄 Reset</button>
+  </div>
+  <div id="res-tps" style="display:none">
+    <div class="rcard">
+      <div class="rtitle">📋 Hasil — Jumlah Contoh TPS/TPS3R/TPST (Pasal 4.2.4)</div>
+      <table class="rt">
+        <thead><tr>
+          <th>Nama Lokasi</th><th>Jenis</th><th>Kapasitas</th>
+          <th>Ritasi/hari (N)</th><th>Metode</th><th>Jml Contoh (n)</th>
+        </tr></thead>
+        <tbody id="tps-tbody"></tbody>
+        <tfoot><tr class="tot">
+          <td colspan="3">TOTAL</td>
+          <td id="tps-ntot">—</td><td>—</td><td id="tps-ctot">—</td>
+        </tr></tfoot>
+      </table>
+      <div style="margin-top:12px">
+        <b style="font-size:.83rem;color:var(--pd)">📐 Langkah Perhitungan:</b>
+        <ol class="steps" id="tps-steps"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TAB TPA ═══════════════════════════ -->
+<div id="tab-tpa" class="tab">
+  <div class="card">
+    <div class="ct">⛰️ Parameter TPA</div>
+    <div class="ibox">
+      <b>Pasal 4.2.5 SNI 3964:2025</b><br>
+      • <b>Alternatif 1</b>: n = N/(1+Ne²) — berlaku untuk semua kondisi<br>
+      • <b>Alternatif 2</b>: ambil 10% dari total jumlah pengangkutan per hari<br>
+      Alat pengangkutan yang dipilih harus mewakili setiap jenis sumber/kawasan.
+    </div>
+    <div class="r2">
+      <div class="fg"><label>Metode</label>
+        <select id="tpa-met">
+          <option value="alt1">Alternatif 1 — Slovin n=N/(1+Ne²)</option>
+          <option value="alt2">Alternatif 2 — 10% dari N</option>
+        </select>
+      </div>
+      <div class="fg"><label>Tingkat Error e (Alt 1)</label>
+        <select id="tpa-e">
+          <option value="0.1">10%</option><option value="0.05">5%</option><option value="0.01">1%</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">🏗️ Daftar Lokasi TPA</div>
+    <div class="ibox">Tambahkan setiap lokasi TPA beserta total ritasi/kunjungan alat angkut per hari.</div>
+    <div id="tpa-rows"></div>
+    <button class="add-btn" onclick="addRow('tpa-rows','tpa')">＋ Tambah Lokasi TPA</button>
+  </div>
+  <div class="ebox" id="err-tpa"></div>
+  <div class="bg-btn">
+    <button class="btn bp" onclick="calcTPA()">🧮 Hitung Jumlah Contoh TPA</button>
+    <button class="btn bs" onclick="resetTab('tpa')">🔄 Reset</button>
+  </div>
+  <div id="res-tpa" style="display:none">
+    <div class="rcard">
+      <div class="rtitle">📋 Hasil — Jumlah Contoh TPA (Pasal 4.2.5)</div>
+      <table class="rt">
+        <thead><tr>
+          <th>Nama TPA</th><th>Kapasitas (ton/hari)</th>
+          <th>Ritasi/hari (N)</th><th>Metode</th><th>Jml Contoh (n)</th>
+        </tr></thead>
+        <tbody id="tpa-tbody"></tbody>
+        <tfoot><tr class="tot">
+          <td colspan="2">TOTAL</td>
+          <td id="tpa-ntot">—</td><td>—</td><td id="tpa-ctot">—</td>
+        </tr></tfoot>
+      </table>
+      <div style="margin-top:12px">
+        <b style="font-size:.83rem;color:var(--pd)">📐 Langkah Perhitungan:</b>
+        <ol class="steps" id="tpa-steps"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TAB INFO ═══════════════════════════ -->
+<div id="tab-info" class="tab">
+  <div class="card">
+    <div class="ct">📐 Kumpulan Rumus SNI 3964:2025</div>
+
+    <p style="font-weight:700;color:var(--pd);margin-bottom:6px">① Proyeksi Penduduk (Geometrik)</p>
+    <div class="fbox">Pt = P₀ × (1 + r/100)ⁿ
+  P₀ = penduduk tahun dasar | r = laju pertumbuhan (%/tahun) | n = selisih tahun</div>
+
+    <p style="font-weight:700;color:var(--pd);margin-bottom:6px;margin-top:13px">② SRT — Jumlah Contoh (Pasal 4.2.2)</p>
+    <div class="fbox">Alternatif 1:
+  Jika Pt ≤ 1.000.000 → Ps = Cd × √Pt
+  Jika Pt > 1.000.000 → Cj = Pt/1.000.000 ; Ps = Cd × Cj × √Pt
+
+Alternatif 2 (Slovin):
+  n = N / (1 + N × e²)   ; e ∈ {0.01, 0.05, 0.10}
+
+Jumlah KK  : K  = Ps (atau n) / N̄
+Jumlah Rumah: Nr = Sn × K  (per tingkat ekonomi H/M/L)</div>
+
+    <p style="font-weight:700;color:var(--pd);margin-bottom:6px;margin-top:13px">③ SSSRT — Jumlah Contoh (Pasal 4.2.3)</p>
+    <div class="fbox">Alternatif 1 : S = Cd × √Ts
+Alternatif 2 : n = N / (1 + N × e²)
+  Ts / N = jumlah unit fasilitas sejenis di wilayah</div>
+
+    <p style="font-weight:700;color:var(--pd);margin-bottom:6px;margin-top:13px">④ TPS/TPS3R/TPST — Jumlah Contoh (Pasal 4.2.4)</p>
+    <div class="fbox">Jika N > 30 kali/hari → Alternatif 1:
+  n = N / (1 + N × e²)
+
+Jika N ≤ 30 kali/hari → Alternatif 2:
+  n = ceil(10% × N)   (dibulatkan ke atas)
+
+  N = total ritasi/kunjungan alat pengumpulan per hari</div>
+
+    <p style="font-weight:700;color:var(--pd);margin-bottom:6px;margin-top:13px">⑤ TPA — Jumlah Contoh (Pasal 4.2.5)</p>
+    <div class="fbox">Alternatif 1 : n = N / (1 + N × e²)
+Alternatif 2 : n = ceil(10% × N)
+  N = total ritasi alat angkut per hari yang masuk ke TPA</div>
+
+    <p style="font-weight:700;color:var(--pd);margin-bottom:6px;margin-top:13px">⑥ Koefisien Cd (Tabel 3 SNI 3964:2025)</p>
+    <table class="rt">
+      <thead><tr><th>Klasifikasi Kota</th><th>Jumlah Penduduk</th><th>Nilai Cd</th></tr></thead>
+      <tbody>
+        <tr><td>Megapolitan</td><td>≥ 5.000.000</td><td><b>1,5</b></td></tr>
+        <tr><td>Metropolitan</td><td>1.000.000 – &lt;5.000.000</td><td><b>1,0</b></td></tr>
+        <tr><td>Kota Besar</td><td>500.000 – &lt;1.000.000</td><td><b>1,0</b></td></tr>
+        <tr><td>Kota Sedang</td><td>100.000 – &lt;500.000</td><td><b>0,5</b></td></tr>
+        <tr><td>Kota Kecil</td><td>&lt; 100.000</td><td><b>0,5</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="ct">📌 Catatan Teknis Lapangan</div>
+    <ul style="font-size:.86rem;line-height:2;padding-left:18px">
+      <li>SRT dihitung terpisah untuk setiap level ekonomi: High, Medium, Low.</li>
+      <li>SSSRT dihitung terpisah per jenis fasilitas (komersial, industri, fassos, fassum, fasilitas lain).</li>
+      <li>Frekuensi sampling: minimal <b>8 hari berturut-turut</b>, atau minimal 3 hari (hari kerja, libur, puncak).</li>
+      <li>Sampling dilakukan pada <b>musim hujan dan musim kemarau</b>.</li>
+      <li>Asumsi: 1 rumah = 1 KK (Pasal 4.2.2).</li>
+      <li>Alat pengangkutan di TPA harus mewakili setiap jenis sumber/kawasan.</li>
+      <li>Sampling dilakukan sekurang-kurangnya <b>setiap 5 tahun sekali</b>.</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+// ────────── UTILS ──────────
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('id-ID');
+const cdMap = {'1.5':1.5,'1':1.0,'1b':1.0,'0.5':0.5,'0.5k':0.5};
+
+function sw(id, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.tb').forEach(b => b.classList.remove('on'));
+  $('tab-'+id).classList.add('on'); btn.classList.add('on');
+}
+
+function showErr(id, msg) {
+  const el = $(id); el.textContent = '⚠️ ' + msg; el.style.display = 'block';
+}
+function hideErr(id) { $(id).style.display = 'none'; }
+
+function setCd(selId, outId) {
+  const v = $(selId).value;
+  $(outId).value = cdMap[v] || '';
+}
+
+// ────────── SRT: PROYEKSI ──────────
+function togProy() {
+  const on = $('chk-proy').checked;
+  $('sec-dir').style.display = on ? 'none' : '';
+  $('sec-proy').style.display = on ? '' : 'none';
+}
+
+function prevProy() {
+  const p0 = parseFloat($('p0').value), r = parseFloat($('rg').value);
+  const td = parseInt($('td').value), tr = parseInt($('thr-p').value);
+  if (!p0 || isNaN(r) || !td || !tr || tr <= td) { $('proy-prev').style.display='none'; return; }
+  const n = tr - td;
+  const pt = Math.round(p0 * Math.pow(1 + r/100, n));
+  $('proy-txt').innerHTML = `Pt = ${fmt(p0)} × (1 + ${r}%)^${n} = <b>${fmt(pt)} jiwa</b>`;
+  $('proy-prev').style.display = '';
+  $('proy-prev').dataset.val = pt;
+}
+
+function pakaiProy() {
+  const pt = $('proy-prev').dataset.val;
+  $('chk-proy').checked = false; togProy();
+  $('pt').value = pt;
+  autoKota(pt, 'srt');
+}
+
+// ────────── SRT: AUTO KOTA ──────────
+function autoKota(v, mod) {
+  const pt = parseInt(v); if (!pt) return;
+  let klass, cd, label;
+  if (pt>=5000000){klass='1.5';cd=1.5;label='Megapolitan'}
+  else if (pt>=1000000){klass='1';cd=1.0;label='Metropolitan'}
+  else if (pt>=500000){klass='1b';cd=1.0;label='Kota Besar'}
+  else if (pt>=100000){klass='0.5';cd=0.5;label='Kota Sedang'}
+  else {klass='0.5k';cd=0.5;label='Kota Kecil'}
+  if (mod==='srt') {
+    $('srt-kota').value = klass; $('srt-cd').value = cd;
+    $('srt-auto-badge').innerHTML = `<span class="badge bg">🤖 Auto: ${label} — Cd = ${cd}</span>`;
+    setTimeout(()=>$('srt-auto-badge').innerHTML='',4000);
+  }
+}
+
+// ────────── SRT: CHECK Sn ──────────
+function chkSn() {
+  const t = (+$('sn-h').value||0)+(+$('sn-m').value||0)+(+$('sn-l').value||0);
+  const ok = Math.abs(t-100)<0.1;
+  $('sn-stat').innerHTML = `<span class="${ok?'badge bg':'badge br'}">Total Sn = ${t.toFixed(1)}% ${ok?'✅ Valid':'⚠️ Harus 100%'}</span>`;
+}
+
+// ────────── CALC SRT ──────────
+function calcSRT() {
+  hideErr('err-srt');
+  const useProy = $('chk-proy').checked;
+  let pt = useProy ? parseInt($('proy-prev').dataset.val||0) : parseInt($('pt').value||0);
+  if (!pt || pt<=0) { showErr('err-srt','Jumlah penduduk (Pt) wajib diisi!'); return; }
+
+  const cd = parseFloat($('srt-cd').value);
+  if (!cd) { showErr('err-srt','Pilih klasifikasi kota terlebih dahulu!'); return; }
+
+  const method = $('srt-met').value;
+  const e = parseFloat($('srt-e').value);
+  const avgKK = parseFloat($('avg-kk').value)||4;
+  const snH = parseFloat($('sn-h').value)||0;
+  const snM = parseFloat($('sn-m').value)||0;
+  const snL = parseFloat($('sn-l').value)||0;
+
+  if (Math.abs(snH+snM+snL-100)>0.1) { showErr('err-srt','Total Sn harus = 100%!'); return; }
+
+  let ps=0, steps=[];
+  if (method==='alt1') {
+    if (pt<=1000000) {
+      ps = cd*Math.sqrt(pt);
+      steps.push(`Pt = ${fmt(pt)} ≤ 1.000.000 → <b>Ps = Cd × √Pt</b>`);
+      steps.push(`Ps = ${cd} × √${fmt(pt)} = ${cd} × ${Math.sqrt(pt).toFixed(3)} = <b>${ps.toFixed(2)} ~ ${Math.round(ps)} orang</b>`);
+    } else {
+      const cj=pt/1000000; ps=cd*cj*Math.sqrt(pt);
+      steps.push(`Pt = ${fmt(pt)} > 1.000.000 → gunakan faktor Cj`);
+      steps.push(`Cj = ${fmt(pt)} / 1.000.000 = ${cj.toFixed(4)}`);
+      steps.push(`Ps = ${cd} × ${cj.toFixed(4)} × √${fmt(pt)} = <b>${ps.toFixed(2)} ~ ${Math.round(ps)} orang</b>`);
+    }
+  } else {
+    ps = pt/(1+pt*e*e);
+    steps.push(`Metode Slovin: n = N / (1 + N × e²)`);
+    steps.push(`n = ${fmt(pt)} / (1 + ${fmt(pt)} × ${e}²) = <b>${ps.toFixed(2)} ~ ${Math.round(ps)} orang</b>`);
+  }
+  const psR=Math.round(ps), K=psR/avgKK, Kr=Math.round(K);
+  steps.push(`K = ${psR} / ${avgKK} = ${K.toFixed(2)} ~ <b>${Kr} KK</b>`);
+
+  const nrH=Math.round(snH/100*Kr), nrM=Math.round(snM/100*Kr), nrL=Math.round(snL/100*Kr);
+  const nrTot=nrH+nrM+nrL;
+  steps.push(`Nr (High)   = ${snH}% × ${Kr} = <b>${nrH} unit rumah</b>`);
+  steps.push(`Nr (Medium) = ${snM}% × ${Kr} = <b>${nrM} unit rumah</b>`);
+  steps.push(`Nr (Low)    = ${snL}% × ${Kr} = <b>${nrL} unit rumah</b>`);
+
+  $('rg-srt').innerHTML = ri('Penduduk (Pt)',fmt(pt),'jiwa')+ri('Contoh Ps/n',fmt(psR),'orang')+
+    ri('Jumlah KK',fmt(Kr),'KK')+ri('Total Rumah',fmt(nrTot),'unit');
+  $('srt-tbody').innerHTML =
+    `<tr><td><span class="badge bo">High</span></td><td>${snH}%</td><td>${Math.round(snH/100*Kr)} KK</td><td><b>${nrH}</b></td></tr>`+
+    `<tr><td><span class="badge bb">Medium</span></td><td>${snM}%</td><td>${Math.round(snM/100*Kr)} KK</td><td><b>${nrM}</b></td></tr>`+
+    `<tr><td><span class="badge bg">Low</span></td><td>${snL}%</td><td>${Math.round(snL/100*Kr)} KK</td><td><b>${nrL}</b></td></tr>`;
+  $('srt-ktot').textContent = Kr+' KK';
+  $('srt-nrtot').textContent = nrTot+' unit';
+  $('srt-steps').innerHTML = steps.map(s=>`<li>${s}</li>`).join('');
+  show('res-srt');
+}
+
+// ────────── SSSRT ROWS ──────────
+const sssrtOpts=['Kawasan Komersial (Pasar/Pertokoan)','Kawasan Komersial (Hotel/Penginapan)',
+  'Kawasan Komersial (Restoran/Rumah Makan)','Kawasan Industri','Kawasan Khusus',
+  'Fasilitas Sosial (Rumah Ibadah)','Fasilitas Sosial (Panti Asuhan)',
+  'Fasilitas Umum (Terminal/Stasiun)','Fasilitas Umum (Taman Kota)','Fasilitas Umum (Wisata)',
+  'Fasilitas Lain (Sekolah/Pendidikan)','Fasilitas Lain (Rumah Sakit/Kesehatan)',
+  'Fasilitas Lain (Perkantoran)','Fasilitas Lain (Pusat Olahraga)','Lainnya'];
+
+const tpsOpts=['TPS (Tempat Penampungan Sementara)','TPS3R','TPST (Terpadu)'];
+const tpaOpts=['TPA Sanitary Landfill','TPA Controlled Landfill','TPA Open Dumping'];
+let rowCounts = {sssrt:0, tps:0, tpa:0};
+
+function addRow(containerId, type) {
+  const i = rowCounts[type]++;
+  const id = type+'-r'+i;
+  const div = document.createElement('div');
+  div.className='entry'; div.id=id;
+  if (i>0) div.innerHTML += `<button class="del" onclick="$('${id}').remove()">×</button>`;
+
+  if (type==='sssrt') {
+    const opts = sssrtOpts.map(o=>`<option value="${o}">${o}</option>`).join('');
+    div.innerHTML += `<div class="r2">
+      <div class="fg"><label>Jenis Fasilitas</label>
+        <select onchange="syncNama(this,'${type}-n${i}')">
+          <option value="">— Pilih jenis —</option>${opts}</select>
+        <input type="text" id="${type}-n${i}" placeholder="Nama fasilitas" style="margin-top:5px">
+      </div>
+      <div class="fg"><label>Total Unit di Wilayah (Ts/N)</label>
+        <input type="number" id="${type}-t${i}" min="1" placeholder="Jumlah unit">
+      </div></div>`;
+  } else if (type==='tps') {
+    const opts = tpsOpts.map(o=>`<option value="${o}">${o}</option>`).join('');
+    div.innerHTML += `<div class="r3">
+      <div class="fg"><label>Nama Lokasi</label>
+        <input type="text" id="${type}-n${i}" placeholder="Nama TPS/TPS3R/TPST"></div>
+      <div class="fg"><label>Jenis</label>
+        <select id="${type}-j${i}">${opts}</select></div>
+      <div class="fg"><label>Kapasitas Alat (m³)</label>
+        <input type="number" id="${type}-k${i}" min="0" step="0.1" placeholder="Kapasitas">
+        <div class="hint">Volume alat pengumpul/pengangkut</div>
+      </div></div>
+    <div class="r2">
+      <div class="fg"><label>Total Ritasi/Kunjungan per Hari (N) *</label>
+        <input type="number" id="${type}-t${i}" min="1" placeholder="Contoh: 45"
+          oninput="previewTPS(this,'${type}-pv${i}')">
+        <div class="hint">Total ritasi semua alat pengumpul per hari ke lokasi ini</div>
+      </div>
+      <div class="fg" style="padding-top:20px">
+        <div id="${type}-pv${i}" style="font-size:.8rem;color:var(--mut)"></div>
+      </div></div>`;
+  } else { // tpa
+    div.innerHTML += `<div class="r3">
+      <div class="fg"><label>Nama TPA</label>
+        <input type="text" id="${type}-n${i}" placeholder="Nama TPA"></div>
+      <div class="fg"><label>Kapasitas TPA (ton/hari)</label>
+        <input type="number" id="${type}-k${i}" min="0" step="1" placeholder="Kapasitas">
+        <div class="hint">Kapasitas penerimaan sampah per hari</div>
+      </div>
+      <div class="fg"><label>Total Ritasi Alat Angkut per Hari (N) *</label>
+        <input type="number" id="${type}-t${i}" min="1" placeholder="Contoh: 20"
+          oninput="previewTPA(this,'${type}-pv${i}')">
+      </div></div>
+      <div id="${type}-pv${i}" style="font-size:.8rem;color:var(--mut);margin-top:4px"></div>`;
+  }
+  $(containerId).appendChild(div);
+}
+
+function syncNama(sel, targetId) { if (sel.value) $(targetId).value = sel.value; }
+
+function previewTPS(inp, pvId) {
+  const N=parseInt(inp.value)||0; if(!N){$(pvId).textContent='';return;}
+  const method=$('tps-met').value; const e=parseFloat($('tps-e').value);
+  let txt='';
+  if (method==='auto') {
+    if (N>30){const n=N/(1+N*e*e);txt=`N=${N} > 30 → Alt 1: n ≈ ${Math.round(n)}`}
+    else{txt=`N=${N} ≤ 30 → Alt 2: n = ⌈10%×${N}⌉ = ${Math.ceil(N*0.1)}`}
+  } else if (method==='alt1'){const n=N/(1+N*e*e);txt=`Alt 1: n ≈ ${Math.round(n)}`}
+  else {txt=`Alt 2: n = ⌈10%×${N}⌉ = ${Math.ceil(N*0.1)}`}
+  $(pvId).innerHTML = `<span class="badge bg">Preview: ${txt}</span>`;
+}
+
+function previewTPA(inp, pvId) {
+  const N=parseInt(inp.value)||0; if(!N){$(pvId).textContent='';return;}
+  const method=$('tpa-met').value; const e=parseFloat($('tpa-e').value);
+  let txt='';
+  if (method==='alt1'){const n=N/(1+N*e*e);txt=`Alt 1: n ≈ ${Math.round(n)}`}
+  else{txt=`Alt 2: n = ⌈10%×${N}⌉ = ${Math.ceil(N*0.1)}`}
+  $(pvId).innerHTML = `<span class="badge bg">Preview: ${txt}</span>`;
+}
+
+// ────────── CALC SSSRT ──────────
+function calcSSSRT() {
+  hideErr('err-sssrt');
+  const method=$('sssrt-met').value, cd=parseFloat($('sssrt-cd').value), e=parseFloat($('sssrt-e').value);
+  if (method==='alt1'&&!cd){showErr('err-sssrt','Pilih klasifikasi kota untuk Alt 1!');return;}
+
+  const entries=document.querySelectorAll('#sssrt-rows .entry');
+  if(!entries.length){showErr('err-sssrt','Tambahkan minimal 1 fasilitas SSSRT!');return;}
+
+  let rows=[],steps=[],tTs=0,tNr=0,ok=true;
+  entries.forEach((en,idx)=>{
+    const id='sssrt-r'+(rowCounts.sssrt-entries.length+idx);
+    let i=-1;
+    // find correct index
+    const ni=en.querySelector('input[id^="sssrt-n"]'); if(!ni)return;
+    const iStr=ni.id.replace('sssrt-n',''); const ti=$('sssrt-t'+iStr);
+    if(!ni||!ti)return;
+    const nama=ni.value.trim()||`Fasilitas ${idx+1}`;
+    const ts=parseInt(ti.value)||0;
+    if(ts<=0){ok=false;return;}
+    let n,desc;
+    if(method==='alt1'){n=cd*Math.sqrt(ts);desc=`Cd×√Ts = ${cd}×√${ts} = ${n.toFixed(2)}`}
+    else{n=ts/(1+ts*e*e);desc=`Slovin = ${ts}/(1+${ts}×${e}²) = ${n.toFixed(2)}`}
+    const nr=Math.round(n);
+    rows.push({nama,ts,nr,desc}); tTs+=ts; tNr+=nr;
+    steps.push(`<b>${nama}</b>: Ts/N = ${ts} → ${desc} ~ <b>${nr} unit contoh</b>`);
+  });
+
+  if(!ok||!rows.length){showErr('err-sssrt','Pastikan semua fasilitas telah terisi dengan benar!');return;}
+  $('sssrt-tbody').innerHTML=rows.map(r=>`<tr><td>${r.nama}</td><td>${fmt(r.ts)}</td><td><b>${r.nr}</b></td><td style="font-size:.76rem;color:var(--mut)">${r.desc}</td></tr>`).join('');
+  $('sssrt-tstot').textContent=fmt(tTs); $('sssrt-ntot').textContent=tNr;
+  $('sssrt-steps').innerHTML=steps.map(s=>`<li>${s}</li>`).join('');
+  show('res-sssrt');
+}
+
+// ────────── CALC TPS ──────────
+function calcTPS() {
+  hideErr('err-tps');
+  const method=$('tps-met').value, e=parseFloat($('tps-e').value);
+  const entries=document.querySelectorAll('#tps-rows .entry');
+  if(!entries.length){showErr('err-tps','Tambahkan minimal 1 lokasi TPS!');return;}
+
+  let rows=[],steps=[],tN=0,tC=0;
+  entries.forEach((en,idx)=>{
+    const ni=en.querySelector('input[id^="tps-n"]');
+    const ki=en.querySelector('input[id^="tps-k"]');
+    const ti=en.querySelector('input[id^="tps-t"]');
+    const ji=en.querySelector('select[id^="tps-j"]');
+    if(!ti)return;
+    const nama=(ni&&ni.value.trim())||`Lokasi ${idx+1}`;
+    const jenis=ji?ji.options[ji.selectedIndex].text:'TPS';
+    const kap=(ki&&ki.value)?ki.value+' m³':'—';
+    const N=parseInt(ti.value)||0;
+    if(N<=0)return;
+    let n,usedMet;
+    if(method==='auto'){
+      if(N>30){n=N/(1+N*e*e);usedMet='Alt 1 (N>30): Slovin'}
+      else{n=Math.ceil(N*0.1);usedMet='Alt 2 (N≤30): 10%'}
+    } else if(method==='alt1'){n=N/(1+N*e*e);usedMet='Alt 1: Slovin'}
+    else{n=Math.ceil(N*0.1);usedMet='Alt 2: 10%'}
+    const nr=Math.round(n);
+    rows.push({nama,jenis,kap,N,nr,usedMet}); tN+=N; tC+=nr;
+
+    if(method==='auto'&&N>30)
+      steps.push(`<b>${nama}</b>: N=${N} > 30 → Alt 1: n = ${N}/(1+${N}×${e}²) = ${n.toFixed(2)} ~ <b>${nr}</b>`);
+    else if(method==='auto')
+      steps.push(`<b>${nama}</b>: N=${N} ≤ 30 → Alt 2: n = ⌈10%×${N}⌉ = <b>${nr}</b>`);
+    else if(method==='alt1')
+      steps.push(`<b>${nama}</b>: n = ${N}/(1+${N}×${e}²) = ${n.toFixed(2)} ~ <b>${nr}</b>`);
+    else
+      steps.push(`<b>${nama}</b>: n = ⌈10%×${N}⌉ = ⌈${(N*0.1).toFixed(1)}⌉ = <b>${nr}</b>`);
+  });
+
+  if(!rows.length){showErr('err-tps','Pastikan jumlah ritasi/hari telah diisi!');return;}
+  $('tps-tbody').innerHTML=rows.map(r=>
+    `<tr><td>${r.nama}</td><td><span class="badge bb">${r.jenis}</span></td><td>${r.kap}</td>
+    <td>${fmt(r.N)}</td><td style="font-size:.76rem">${r.usedMet}</td><td><b>${r.nr}</b></td></tr>`).join('');
+  $('tps-ntot').textContent=fmt(tN); $('tps-ctot').textContent=tC;
+  $('tps-steps').innerHTML=steps.map(s=>`<li>${s}</li>`).join('');
+  show('res-tps');
+}
+
+// ────────── CALC TPA ──────────
+function calcTPA() {
+  hideErr('err-tpa');
+  const method=$('tpa-met').value, e=parseFloat($('tpa-e').value);
+  const entries=document.querySelectorAll('#tpa-rows .entry');
+  if(!entries.length){showErr('err-tpa','Tambahkan minimal 1 lokasi TPA!');return;}
+
+  let rows=[],steps=[],tN=0,tC=0;
+  entries.forEach((en,idx)=>{
+    const ni=en.querySelector('input[id^="tpa-n"]');
+    const ki=en.querySelector('input[id^="tpa-k"]');
+    const ti=en.querySelector('input[id^="tpa-t"]');
+    if(!ti)return;
+    const nama=(ni&&ni.value.trim())||`TPA ${idx+1}`;
+    const kap=(ki&&ki.value)?ki.value+' ton/hari':'—';
+    const N=parseInt(ti.value)||0; if(N<=0)return;
+    let n,usedMet;
+    if(method==='alt1'){n=N/(1+N*e*e);usedMet='Alt 1: Slovin'}
+    else{n=Math.ceil(N*0.1);usedMet='Alt 2: 10%'}
+    const nr=Math.round(n);
+    rows.push({nama,kap,N,nr,usedMet}); tN+=N; tC+=nr;
+    if(method==='alt1')
+      steps.push(`<b>${nama}</b>: n = ${N}/(1+${N}×${e}²) = ${n.toFixed(2)} ~ <b>${nr} ritasi contoh</b>`);
+    else
+      steps.push(`<b>${nama}</b>: n = ⌈10%×${N}⌉ = ⌈${(N*0.1).toFixed(1)}⌉ = <b>${nr} ritasi contoh</b>`);
+  });
+
+  if(!rows.length){showErr('err-tpa','Pastikan jumlah ritasi/hari telah diisi!');return;}
+  $('tpa-tbody').innerHTML=rows.map(r=>
+    `<tr><td>${r.nama}</td><td>${r.kap}</td><td>${fmt(r.N)}</td>
+    <td style="font-size:.76rem">${r.usedMet}</td><td><b>${r.nr}</b></td></tr>`).join('');
+  $('tpa-ntot').textContent=fmt(tN); $('tpa-ctot').textContent=tC;
+  $('tpa-steps').innerHTML=steps.map(s=>`<li>${s}</li>`).join('');
+  show('res-tpa');
+}
+
+// ────────── HELPERS ──────────
+function ri(lbl,val,unit){
+  return `<div class="ri"><div class="rl">${lbl}</div><div class="rv">${val}</div><div class="ru">${unit}</div></div>`;
+}
+function show(id){$(id).style.display='block';$(id).scrollIntoView({behavior:'smooth',block:'nearest'});}
+
+function resetTab(tab) {
+  $('res-'+tab).style.display='none';
+  hideErr('err-'+tab);
+  if(tab==='srt'){
+    $('pt').value='';$('srt-cd').value='';$('srt-kota').value='';
+    $('sn-h').value=15;$('sn-m').value=75;$('sn-l').value=10;
+    $('chk-proy').checked=false;togProy();$('sn-stat').innerHTML='';
+  } else if(tab==='sssrt'){
+    $('sssrt-rows').innerHTML='';rowCounts.sssrt=0;
+    addRow('sssrt-rows','sssrt');addRow('sssrt-rows','sssrt');
+  } else if(tab==='tps'){
+    $('tps-rows').innerHTML='';rowCounts.tps=0;addRow('tps-rows','tps');
+  } else if(tab==='tpa'){
+    $('tpa-rows').innerHTML='';rowCounts.tpa=0;addRow('tpa-rows','tpa');
+  }
+}
+
+// ────────── INIT ──────────
+chkSn();
+addRow('sssrt-rows','sssrt'); addRow('sssrt-rows','sssrt');
+addRow('tps-rows','tps');
+addRow('tpa-rows','tpa');
+</script>
+</body>
+</html>
